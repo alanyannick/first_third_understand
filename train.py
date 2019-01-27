@@ -189,15 +189,15 @@ def train(
             t0 = time.time()
             print(s)
 
-            save_model_batch = 500
-            if i % save_model_batch == 0:
-                batch_weights_file = os.path.join(weights_path, 'latest' + str(save_model_batch)+ '.pt')
-                # Save latest checkpoint
-                checkpoint = {'batch': i,
-                              'best_loss': best_loss,
-                              'model': model.state_dict(),
-                              'optimizer': optimizer.state_dict()}
-                torch.save(checkpoint, batch_weights_file)
+            # save_model_batch = 500
+            # if i % save_model_batch == 0:
+            #     batch_weights_file = os.path.join(weights_path, 'latest' + str(save_model_batch)+ '.pt')
+            #     # Save latest checkpoint
+            #     checkpoint = {'batch': i,
+            #                   'best_loss': best_loss,
+            #                   'model': model.state_dict(),
+            #                   'optimizer': optimizer.state_dict()}
+            #     torch.save(checkpoint, batch_weights_file)
 
         # Update best loss
         loss_per_target = rloss['loss'] / rloss['nT']
@@ -244,14 +244,14 @@ def train(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--epochs', type=int, default=100, help='number of epochs')
-    parser.add_argument('--batch-size', type=int, default=16, help='size of each image batch')
+    parser.add_argument('--epochs', type=int, default=1000, help='number of epochs')
+    parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
     parser.add_argument('--accumulated-batches', type=int, default=1, help='number of batches before optimizer step')
     parser.add_argument('--data-config', type=str, default='cfg/coco.data', help='path to data config file')
     parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='cfg file path')
     parser.add_argument('--multi-scale', action='store_true', help='random image sizes per batch 320 - 608')
     parser.add_argument('--img-size', type=int, default=32 * 13, help='pixels')
-    parser.add_argument('--weights-path', type=str, default='weights', help='path to store weights')
+    parser.add_argument('--weights-path', type=str, default='weights_overfit', help='path to store weights')
     parser.add_argument('--resume', action='store_true', help='resume training flag')
     parser.add_argument('--report', action='store_true', help='report TP, FP, FN, P and R per batch (slower)')
     parser.add_argument('--freeze', action='store_true', help='freeze darknet53.conv.74 layers for first epoch')
