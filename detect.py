@@ -18,8 +18,8 @@ def detect(
         img_size=416,
         conf_thres=0.3,
         nms_thres=0.45,
-        save_txt=False,
-        save_images=False,
+        save_txt=True,
+        save_images=True,
 ):
     device = torch_utils.select_device()
     print("Using device: \"{}\"".format(device))
@@ -52,7 +52,7 @@ def detect(
         # model.to(device).eval()
         # del checkpoint, current, saved
 
-    model.to(device).eval()
+    model.cuda().eval()
 
     # Set Dataloader
     classes = load_classes(data_config['names'])  # Extracts class labels from file
@@ -67,7 +67,7 @@ def detect(
         # Get detections
         with torch.no_grad():
             # cv2.imwrite('zidane_416.jpg', 255 * img.transpose((1, 2, 0))[:, :, ::-1])  # letterboxed
-            img = torch.from_numpy(img).unsqueeze(0).to(device)
+            img = torch.from_numpy(img).unsqueeze(0).cuda()
             if ONNX_EXPORT:
                 pred = torch.onnx._export(model, img, 'weights/model.onnx', verbose=True);
                 return  # ONNX export
@@ -155,9 +155,9 @@ if __name__ == '__main__':
     parser.add_argument('--txt-out', type=bool, default=False)
     parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='cfg file path')
     parser.add_argument('--data-config', type=str, default='cfg/coco.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weights/yolov3.pt', help='path to weights file')
-    parser.add_argument('--conf-thres', type=float, default=0.50, help='object confidence threshold')
-    parser.add_argument('--nms-thres', type=float, default=0.45, help='iou threshold for non-maximum suppression')
+    parser.add_argument('--weights', type=str, default='weights/latest500.pt', help='path to weights file')
+    parser.add_argument('--conf-thres', type=float, default=0.10, help='object confidence threshold')
+    parser.add_argument('--nms-thres', type=float, default=0.25, help='iou threshold for non-maximum suppression')
     parser.add_argument('--batch-size', type=int, default=1, help='size of the batches')
     parser.add_argument('--img-size', type=int, default=32 * 13, help='size of each image dimension')
     opt = parser.parse_args()

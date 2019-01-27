@@ -39,7 +39,7 @@ def test(
     else:  # darknet format
         load_weights(model, weights_file_path)
 
-    model.to(device).eval()
+    model.cuda().eval()
 
     # Get dataloader
     # dataset = load_images_with_labels(test_path)
@@ -53,7 +53,7 @@ def test(
     for batch_i, (imgs, targets) in enumerate(dataloader):
 
         with torch.no_grad():
-            output = model(imgs.to(device))
+            output = model(imgs.cuda())
             output = non_max_suppression(output, conf_thres=conf_thres, nms_thres=nms_thres)
 
         # Compute average precision for each sample
