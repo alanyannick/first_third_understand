@@ -145,13 +145,56 @@ class load_images_and_labels():  # for training
                 # important here @yangming
                 # for the label, it should be float here
                 labels0 = np.loadtxt(label_path, dtype=np.float32).reshape(-1, 5)
+                # Remeber here the data format should be xywh
+                # Normalized source center_x, center_y, w, h to xywh space
+                labels1 = labels0.copy()
 
-                # Normalized xywh to pixel xyxy format
-                labels = labels0.copy()
-                labels[:, 1] = ratio * w * (labels0[:, 1] - labels0[:, 3] / 2) + padw
-                labels[:, 2] = ratio * h * (labels0[:, 2] - labels0[:, 4] / 2) + padh
-                labels[:, 3] = ratio * w * (labels0[:, 1] + labels0[:, 3] / 2) + padw
-                labels[:, 4] = ratio * h * (labels0[:, 2] + labels0[:, 4] / 2) + padh
+                # @Notice: please remember to get the right w, h firstly
+                # check the xywh
+                check_xywh = False
+                if check_xywh == True:
+                    labels1[:, 3] = w * (labels1[:, 3])
+                    labels1[:, 4] = h * (labels1[:, 4])
+                    labels1[:, 1] = (w * (labels1[:, 1])) - labels1[:, 3] / 2
+                    labels1[:, 2] = (h * (labels1[:, 2])) - labels1[:, 4] / 2
+                    # visualize the result here
+                    visualize_result = False
+                    if visualize_result == True:
+                        import utils.utils as util
+                        img_path = '/home/yangmingwen/first_third_person/first_third_understanding/data/datasets/o2-00282_location.jpg'
+                        original = cv2.imread(img_path)
+                        x1 = labels1[:, 1]
+                        y1 = labels1[:, 2]
+                        width = labels1[:, 3]
+                        height = labels1[:, 4]
+                        bbox = [x1, y1, width, height]
+                        util.draw_bounding_box(original, bbox)
+                        util.plot_one_box([x1, y1, x1+width, y1+height], original)
+
+                    #Normalize xywh from source size to 0-1 xywh / left top x,y, w, h
+                    labels1[:, 3] = (labels1[:, 3])/w
+                    labels1[:, 4] = (labels1[:, 4])/h
+                    labels1[:, 1] = (labels1[:, 1])/w
+                    labels1[:, 2] = (labels1[:, 2])/h
+
+                # Normalized CxCywh (which is the MSCOCO's source method)
+                # to pixel xyxy format with padding
+                labels = labels1.copy()
+                labels[:, 1] = ratio * w * (labels1[:, 1] - labels1[:, 3] / 2) + padw
+                labels[:, 2] = ratio * h * (labels1[:, 2] - labels1[:, 4] / 2) + padh
+                labels[:, 3] = ratio * w * (labels1[:, 1] + labels1[:, 3] / 2) + padw
+                labels[:, 4] = ratio * h * (labels1[:, 2] + labels1[:, 4] / 2) + padh
+
+                # visualize the bbox on 416 size
+                if visualize_result == True:
+                    WHITE = (255, 0, 255)
+                    c1 = (labels[:, 1], labels[:, 2])
+                    c2 = (labels[:, 3], labels[:, 4])
+                    img_path = '/home/yangmingwen/first_third_person/first_third_understanding/data/datasets/o2-00282_location.jpg'
+                    original = cv2.imread(img_path)
+                    img, ratio, padw, padh = resize_square(original, height=height, color=(127.5, 127.5, 127.5))
+                    cv2.rectangle(img, c1, c2, color=WHITE, thickness=2)
+                    cv2.imwrite('/home/yangmingwen/first_third_person/result.jpg', img)
             else:
                 labels = np.array([])
 
