@@ -17,8 +17,10 @@ def test(
         conf_thres=0.3,
         nms_thres=0.45,
         n_cpus=0,
+        gpu_choice = "1",
 ):
-    device = torch_utils.select_device()
+
+    device = torch_utils.select_device(gpu_choice=gpu_choice)
     print("Using device: \"{}\"".format(device))
 
     # Configure run
