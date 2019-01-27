@@ -186,6 +186,7 @@ class load_images_and_labels():  # for training
                 labels[:, 4] = ratio * h * (labels1[:, 2] + labels1[:, 4] / 2) + padh
 
                 # visualize the bbox on 416 size
+                visualize_result = False
                 if visualize_result == True:
                     WHITE = (255, 0, 255)
                     c1 = (labels[:, 1], labels[:, 2])
