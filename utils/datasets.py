@@ -142,6 +142,8 @@ class load_images_and_labels():  # for training
 
             # Load labels
             if os.path.isfile(label_path):
+                # important here @yangming
+                # for the label, it should be float here
                 labels0 = np.loadtxt(label_path, dtype=np.float32).reshape(-1, 5)
 
                 # Normalized xywh to pixel xyxy format

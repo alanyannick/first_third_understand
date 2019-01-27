@@ -17,10 +17,13 @@ with open(tsv_file_path) as f:
         out_file_link = out_file_dir + ego_link
         # get the gt: cls, x_center, y_center, w, h
         ground_truth = darknet_targets[0].tolist()
-        ground_truth = str(ground_truth).split('[')[1].split(']')[0]
         # create the final output txt file here.
         gt_file = open(out_file_link, 'w')
-        gt_file.write(str(ground_truth) + '\n')
+        # ValueError: could not convert string to float: '3.0,'
+        # notice here should be float, rather than when reads the file you will meet this problems
+        for num in ground_truth:
+            gt_file.write(str((num)) + ' ')
+        gt_file.write('\n')
         gt_file.close()
 
 # Create the final file_list
