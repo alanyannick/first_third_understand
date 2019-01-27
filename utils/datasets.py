@@ -157,6 +157,7 @@ class load_images_and_labels():  # for training
             if self.augment:
                 img, labels, M = random_affine(img, labels, degrees=(-5, 5), translate=(0.10, 0.10), scale=(0.90, 1.10))
 
+            # plot flag here @yangming
             plotFlag = False
             if plotFlag:
                 import matplotlib.pyplot as plt
