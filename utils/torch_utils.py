@@ -16,9 +16,11 @@ def init_seeds(seed=0):
         # torch.cuda.set_device(0)  # OPTIONAL: Set your GPU if multiple available
 
 
-def select_device(force_cpu=False):
+def select_device(force_cpu=False, gpu_choice='0'):
     if force_cpu:
         device = torch.device('cpu')
     else:
-        device = torch.device('cuda:0' if CUDA_AVAILABLE else 'cpu')
+        device = torch.device('cuda:'+ gpu_choice if CUDA_AVAILABLE else 'cpu')
+        # set the GPU here @yangming
+        torch.cuda.set_device(device)
     return device

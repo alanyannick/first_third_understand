@@ -23,12 +23,13 @@ def train(
         batch_size=16,
         accumulated_batches=1,
         weights_path='weights',
-        report=False,
+        report=True,
         multi_scale=False,
-        freeze_backbone=True,
+        freeze_backbone=False,
         var=0,
+        gpu_id='0'
 ):
-    device = torch_utils.select_device()
+    device = torch_utils.select_device(gpu_choice=gpu_id)
     print("Using device: \"{}\"".format(device))
 
     if multi_scale:  # pass maximum multi_scale size
@@ -37,6 +38,8 @@ def train(
         torch.backends.cudnn.benchmark = True
 
     os.makedirs(weights_path, exist_ok=True)
+
+    # Save model path
     latest_weights_file = os.path.join(weights_path, 'latest.pt')
     best_weights_file = os.path.join(weights_path, 'best.pt')
 
@@ -91,12 +94,12 @@ def train(
         assert os.path.isfile(def_weight_file)
         load_weights(model, def_weight_file)
 
-        if torch.cuda.device_count() > 1:
-            raise Exception('Multi-GPU not currently supported: https://github.com/ultralytics/yolov3/issues/21')
+        # if torch.cuda.device_count() > 1:
+        #     raise Exception('Multi-GPU not currently supported: https://github.com/ultralytics/yolov3/issues/21')
             # print('Using ', torch.cuda.device_count(), ' GPUs')
             # model = nn.DataParallel(model)
-        model.to(device).train()
 
+        model.to(device).train()
         # Set optimizer
         optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=lr0, momentum=.9)
 
@@ -185,6 +188,16 @@ def train(
                 model.losses['FP'], model.losses['FN'], time.time() - t0)
             t0 = time.time()
             print(s)
+
+            save_model_batch = 500
+            if i % save_model_batch == 0:
+                batch_weights_file = os.path.join(weights_path, 'latest' + str(save_model_batch)+ '.pt')
+                # Save latest checkpoint
+                checkpoint = {'batch': i,
+                              'best_loss': best_loss,
+                              'model': model.state_dict(),
+                              'optimizer': optimizer.state_dict()}
+                torch.save(checkpoint, batch_weights_file)
 
         # Update best loss
         loss_per_target = rloss['loss'] / rloss['nT']
