@@ -27,7 +27,7 @@ def train(
         multi_scale=False,
         freeze_backbone=False,
         var=0,
-        gpu_id='1'
+        gpu_id='0'
 ):
     device = torch_utils.select_device(gpu_choice=gpu_id)
     print("Using device: \"{}\"".format(device))
@@ -64,7 +64,7 @@ def train(
             raise Exception('Multi-GPU not currently supported: https://github.com/ultralytics/yolov3/issues/21')
             # print('Using ', torch.cuda.device_count(), ' GPUs')
             # model = nn.DataParallel(model)
-        model.cuda().train()
+        model.to(device).train()
 
         # # Transfer learning (train only YOLO layers)
         # for i, (name, p) in enumerate(model.named_parameters()):
@@ -152,7 +152,7 @@ def train(
                     g['lr'] = lr
 
             # Compute loss, compute gradient, update parameters
-            loss = model(imgs.cuda(), targets, batch_report=report, var=var)
+            loss = model(imgs.to(device), targets, batch_report=report, var=var)
             loss.backward()
 
             # accumulate gradient for x batches before optimizing
@@ -234,6 +234,7 @@ def train(
             latest_weights_file,
             batch_size=batch_size,
             img_size=img_size,
+            gpu_choice=gpu_id,
         )
 
         # Write epoch results
