@@ -114,7 +114,7 @@ def detect(
 
             for i in unique_classes:
                 n = (detections[:, -1].cpu() == i).sum()
-                print('%g %ss' % (n, classes[int(i)]))
+                print('%g %s' % (n, classes[int(i)]))
 
             for x1, y1, x2, y2, conf, cls_conf, cls_pred in detections:
                 # Rescale coordinates to original dimensions
@@ -134,6 +134,7 @@ def detect(
                 if save_images:
                     # Add the bbox to the plot
                     label = '%s %.2f' % (classes[int(cls_pred)], conf)
+                    print("Confidence:" + str(conf))
                     color = bbox_colors[int(np.where(unique_classes == int(cls_pred))[0])]
                     plot_one_box([x1, y1, x2, y2], img, label=label, color=color)
 
@@ -155,9 +156,9 @@ if __name__ == '__main__':
     parser.add_argument('--txt-out', type=bool, default=False)
     parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='cfg file path')
     parser.add_argument('--data-config', type=str, default='cfg/coco.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weights/latest500.pt', help='path to weights file')
-    parser.add_argument('--conf-thres', type=float, default=0.10, help='object confidence threshold')
-    parser.add_argument('--nms-thres', type=float, default=0.25, help='iou threshold for non-maximum suppression')
+    parser.add_argument('--weights', type=str, default='weights_overfit/backup29800.pt', help='path to weights file')
+    parser.add_argument('--conf-thres', type=float, default=0.0, help='object confidence threshold')
+    parser.add_argument('--nms-thres', type=float, default=0.0, help='iou threshold for non-maximum suppression')
     parser.add_argument('--batch-size', type=int, default=1, help='size of the batches')
     parser.add_argument('--img-size', type=int, default=32 * 13, help='size of each image dimension')
     opt = parser.parse_args()

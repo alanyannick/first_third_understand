@@ -60,8 +60,8 @@ def train(
         checkpoint = torch.load(latest_weights_file, map_location='cpu')
 
         model.load_state_dict(checkpoint['model'])
-        if torch.cuda.device_count() > 1:
-            raise Exception('Multi-GPU not currently supported: https://github.com/ultralytics/yolov3/issues/21')
+        # if torch.cuda.device_count() > 1:
+            # raise Exception('Multi-GPU not currently supported: https://github.com/ultralytics/yolov3/issues/21')
             # print('Using ', torch.cuda.device_count(), ' GPUs')
             # model = nn.DataParallel(model)
         model.to(device).train()
@@ -189,15 +189,15 @@ def train(
             t0 = time.time()
             print(s)
 
-            save_model_batch = 500
-            if i % save_model_batch == 0:
-                batch_weights_file = os.path.join(weights_path, 'latest' + str(save_model_batch)+ '.pt')
-                # Save latest checkpoint
-                checkpoint = {'batch': i,
-                              'best_loss': best_loss,
-                              'model': model.state_dict(),
-                              'optimizer': optimizer.state_dict()}
-                torch.save(checkpoint, batch_weights_file)
+            # save_model_batch = 500
+            # if i % save_model_batch == 0:
+            #     batch_weights_file = os.path.join(weights_path, 'latest' + str(save_model_batch)+ '.pt')
+            #     # Save latest checkpoint
+            #     checkpoint = {'batch': i,
+            #                   'best_loss': best_loss,
+            #                   'model': model.state_dict(),
+            #                   'optimizer': optimizer.state_dict()}
+            #     torch.save(checkpoint, batch_weights_file)
 
         # Update best loss
         loss_per_target = rloss['loss'] / rloss['nT']
@@ -219,7 +219,7 @@ def train(
             ))
 
         # Save backup weights every 5 epochs
-        if (epoch > 0) & (epoch % 5 == 0):
+        if (epoch > 0) & (epoch % 200 == 0):
             backup_file_name = 'backup{}.pt'.format(epoch)
             backup_file_path = os.path.join(weights_path, backup_file_name)
             os.system('cp {} {}'.format(
@@ -244,18 +244,19 @@ def train(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--epochs', type=int, default=100, help='number of epochs')
-    parser.add_argument('--batch-size', type=int, default=16, help='size of each image batch')
+    parser.add_argument('--epochs', type=int, default=1000, help='number of epochs')
+    parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
     parser.add_argument('--accumulated-batches', type=int, default=1, help='number of batches before optimizer step')
     parser.add_argument('--data-config', type=str, default='cfg/coco.data', help='path to data config file')
     parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='cfg file path')
     parser.add_argument('--multi-scale', action='store_true', help='random image sizes per batch 320 - 608')
     parser.add_argument('--img-size', type=int, default=32 * 13, help='pixels')
-    parser.add_argument('--weights-path', type=str, default='weights', help='path to store weights')
+    parser.add_argument('--weights-path', type=str, default='weights_overfit', help='path to store weights')
     parser.add_argument('--resume', action='store_true', help='resume training flag')
     parser.add_argument('--report', action='store_true', help='report TP, FP, FN, P and R per batch (slower)')
     parser.add_argument('--freeze', action='store_true', help='freeze darknet53.conv.74 layers for first epoch')
     parser.add_argument('--var', type=float, default=0, help='optional test variable')
+    parser.add_argument('--gpu_id', type=str, default='3', help='optional test variable')
     opt = parser.parse_args()
     print(opt, end='\n\n')
 
@@ -275,4 +276,5 @@ if __name__ == '__main__':
         multi_scale=opt.multi_scale,
         freeze_backbone=opt.freeze,
         var=opt.var,
+        gpu_id=opt.gpu_id
     )
