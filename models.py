@@ -204,6 +204,7 @@ class YOLOLayer(nn.Module):
                 lw = k * MSELoss(w[mask], tw[mask])
                 lh = k * MSELoss(h[mask], th[mask])
 
+                # calculate cross entropy loss here with the (cls[mask], gtlabel)
                 lcls = (k / 4) * CrossEntropyLoss(p_cls[mask], torch.argmax(tcls, 1))
                 # lcls = (k * 10) * BCEWithLogitsLoss(p_cls[mask], tcls.float())
             else:
