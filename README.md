@@ -18,13 +18,16 @@ Now, I have done the overfit experiment for the single image and whole coco data
 
 # Training
 
-**Start Training:** Run `train.py` to begin training.
+**Start Training:** 
+Run `train.py` to begin training.
 
-**Resume Training:** Run `train.py --resume` to resume training from the most recently saved checkpoint `weights/latest.pt`.
----
+**Resume Training:** 
+Run `train.py --resume` to resume training from the most recently saved checkpoint `weights/latest.pt`.
+
+```
    Epoch       Batch         x         y         w         h      conf       cls     total         P         R  nTargets        TP        FP        FN      time
 6221/99999         0/0    0.0173  0.000556    0.0204   0.00243    0.0639   0.00077     0.105         0         0         1         0         0         0      4.82
----
+```
 
 ## Image Augmentation
 
@@ -39,8 +42,6 @@ Scale | +/- 10%
 Reflection | 50% probability (horizontal-only)
 H**S**V Saturation | +/- 50%
 HS**V** Intensity | +/- 50%
-
-<img src="https://user-images.githubusercontent.com/26833433/50525037-6cbcbc00-0ad9-11e9-8c38-9fd51af530e0.jpg">
 
 # Inference
 
