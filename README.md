@@ -15,15 +15,31 @@ Python 3.7 or later with the following `pip3 install -U -r requirements.txt` pac
 Now, I have done the overfit experiment for the single image and whole coco datasets, which the training runs about 1 hour per COCO epoch on a 1080 Ti.
 (Each epoch trains on 120,000 images from the train and validate COCO sets, and tests on 5000 images from the COCO validate set. Default training settings produce loss plots below, with **training speed of 0.6 s/batch on a 1080 Ti (15 epochs/day) and 0.4s/batch on a Titan X**)
 
+## Datasets
+
+- 1.Generate the image link in `data/datasets/file_list.txt`.
+
+- 2.Put the groundtruth link in `data/labels`.
+
+###### (Note: You can easily use the script in `utils/generating_data_label.py` to generate it from Markhams's meta.tsv)
+
+- 3.Put the images in `data/images`.
 
 ## Training
 
 **Start Training:** 
-Run `train.py` to begin training.
+- Run `train.py` to begin training. 
+- Run `train.py --resume` to resume training from the most recently saved checkpoint `weights/latest.pt`.
+- GPU option updated, you can easily choose the GPU id and batchsize with `gpu_id`/`batch-size` option.
 
-**Resume Training:** 
-Run `train.py --resume` to resume training from the most recently saved checkpoint `weights/latest.pt`.
+```
+python train.py --gpu_id '1' --batch-size 16
+```
+- More option provides in train.py
 
+
+
+**Loss:**
 ```
    Epoch       Batch         x         y         w         h      conf       cls     total         P         R  nTargets        TP        FP        FN      time
 6221/99999         0/0    0.0173  0.000556    0.0204   0.00243    0.0639   0.00077     0.105         0         0         1         0         0         0      4.82
@@ -31,9 +47,13 @@ Run `train.py --resume` to resume training from the most recently saved checkpoi
 
 ## Inference
 
-Run `detect.py` to apply trained weights to an image and visualize results, such as `o2-00282.jpg` from the `data/samples` folder, shown here. 
+- Run `detect.py` to apply trained weights to an image and visualize results, such as `o2-00282.jpg` from the `data/samples` folder, shown here. 
 
-**YOLOv3:** `detect.py --cfg cfg/yolov3.cfg --weights /home/yangmingwen/first_third_person/first_third_understanding/weights_overfit/lastest.pt`
+**YOLOv3:** 
+
+```
+detect.py --cfg cfg/yolov3.cfg --weights /home/yangmingwen/first_third_person/first_third_understanding/weights_overfit/lastest.pt
+```
 <img src="output/o2-00282.jpg" width="800">
 
 ## Pretrained Weights
@@ -55,18 +75,16 @@ Run `test.py --weights weights/latest.pt` to validate against the latest trainin
 
 Run `test.py` --weights weights_overfit/latest.pt` for verifying our experiments.
 ```
--------------------------------------------------------------------------------------------------------------------------
    Image      Total          P          R        mAP
           1          1          1          1          1
 ```
 
 ## TODO:
-- [ ] Image Augmentation 
-- [ ] Train the model with more model.
+- [x] Image Augmentation   
 - [ ] Train the model with more training tricks.
+
 ### Image Augmentation 
 `(Wait for verifying here.)`
-
 
 `datasets.py` applies random OpenCV-powered (https://opencv.org/) augmentation to the input images in accordance with the following specifications. Augmentation is applied **only** during training, not during inference. Bounding boxes are automatically tracked and updated with the images. 416 x 416 examples pictured below.
 
