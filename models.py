@@ -4,7 +4,7 @@ import torch.nn as nn
 
 from utils.parse_config import *
 from utils.utils import *
-
+import os
 ONNX_EXPORT = False
 
 
@@ -161,7 +161,11 @@ class YOLOLayer(nn.Module):
             # Get outputs
             x = torch.sigmoid(p[..., 0])  # Center x
             y = torch.sigmoid(p[..., 1])  # Center y
+
+            # Will calculate the mask here to get the loss of cls loss
             p_conf = p[..., 4]  # Conf
+            # print p_conf
+            print('p_conf value:' + str(p_conf.max()))
             p_cls = p[..., 5:]  # Class
 
             # Width and height (yolo method)
@@ -420,3 +424,11 @@ def save_weights(self, path, cutoff=-1):
             conv_layer.weight.data.cpu().numpy().tofile(fp)
 
     fp.close()
+
+if __name__ == '__main__':
+    # Folder name
+    latest_weights_file = os.path.join('weights', 'yolov3.pt')
+    checkpoint = torch.load(latest_weights_file, map_location='cpu')
+    # Initialize model
+    model = Darknet('cfg/yolov3.cfg', 416)
+    model.load_state_dict(checkpoint['model'])
