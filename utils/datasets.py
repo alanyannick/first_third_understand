@@ -12,6 +12,36 @@ import torch
 from utils.utils import xyxy2xywh
 
 
+def normalize_img(img_all):
+    img_all = np.stack(img_all)[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB and cv2 to pytorch
+    img_all = np.ascontiguousarray(img_all, dtype=np.float32)
+    # img_all -= self.rgb_mean
+    # img_all /= self.rgb_std
+    img_all /= 255.0
+    return img_all
+
+
+def sv_augmentation(img, fraction):
+    img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    S = img_hsv[:, :, 1].astype(np.float32)
+    V = img_hsv[:, :, 2].astype(np.float32)
+
+    a = (random.random() * 2 - 1) * fraction + 1
+    S *= a
+    if a > 1:
+        np.clip(S, a_min=0, a_max=255, out=S)
+
+    a = (random.random() * 2 - 1) * fraction + 1
+    V *= a
+    if a > 1:
+        np.clip(V, a_min=0, a_max=255, out=V)
+
+    img_hsv[:, :, 1] = S.astype(np.uint8)
+    img_hsv[:, :, 2] = V.astype(np.uint8)
+    cv2.cvtColor(img_hsv, cv2.COLOR_HSV2BGR, dst=img)
+    return img
+
+
 class load_images():  # for inference
     def __init__(self, path, batch_size=1, img_size=416):
         if os.path.isdir(path):
@@ -107,11 +137,22 @@ class load_images_and_labels():  # for training
 
         img_all = []
         labels_all = []
+        scene_all = []
+
         for index, files_index in enumerate(range(ia, ib)):
             img_path = self.img_files[self.shuffled_vector[files_index]]
             label_path = self.label_files[self.shuffled_vector[files_index]]
-
             img = cv2.imread(img_path)  # BGR
+
+            scene_flag = True
+
+            if scene_flag:
+                scene_path = (img_path.split(img_path.split('-')[-1])[0] + '00001.jpg').replace('images', 'scenes')
+                scene_img = cv2.imread(scene_path)
+                if scene_img is None:
+                    assert ("Cannot find the scene image in " + scene_path)
+                    continue
+
             if img is None:
                 continue
 
@@ -119,26 +160,15 @@ class load_images_and_labels():  # for training
             if self.augment and augment_hsv:
                 # SV augmentation by 50%
                 fraction = 0.50
-                img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-                S = img_hsv[:, :, 1].astype(np.float32)
-                V = img_hsv[:, :, 2].astype(np.float32)
-
-                a = (random.random() * 2 - 1) * fraction + 1
-                S *= a
-                if a > 1:
-                    np.clip(S, a_min=0, a_max=255, out=S)
-
-                a = (random.random() * 2 - 1) * fraction + 1
-                V *= a
-                if a > 1:
-                    np.clip(V, a_min=0, a_max=255, out=V)
-
-                img_hsv[:, :, 1] = S.astype(np.uint8)
-                img_hsv[:, :, 2] = V.astype(np.uint8)
-                cv2.cvtColor(img_hsv, cv2.COLOR_HSV2BGR, dst=img)
+                img = sv_augmentation(img, fraction)
+                if scene_flag:
+                    scene_img = sv_augmentation(scene_img, fraction)
 
             h, w, _ = img.shape
             img, ratio, padw, padh = resize_square(img, height=height, color=(127.5, 127.5, 127.5))
+
+            if scene_flag:
+                scene_img, _, _, _ = resize_square(scene_img, height=height, color=(127.5, 127.5, 127.5))
 
             # Load labels
             if os.path.isfile(label_path):
@@ -202,7 +232,9 @@ class load_images_and_labels():  # for training
             # Augment image and labels
             if self.augment:
                 img, labels, M = random_affine(img, labels, degrees=(-5, 5), translate=(0.10, 0.10), scale=(0.90, 1.10))
-
+                if scene_flag:
+                    scene_img, _, _ = random_affine(scene_img, labels, degrees=(-5, 5), translate=(0.10, 0.10),
+                                                   scale=(0.90, 1.10))
             # plot flag here @yangming
             plotFlag = False
             if plotFlag:
@@ -222,6 +254,8 @@ class load_images_and_labels():  # for training
                 lr_flip = True
                 if lr_flip & (random.random() > 0.5):
                     img = np.fliplr(img)
+                    if scene_flag:
+                        scene_img = np.fliplr(scene_img)
                     if nL > 0:
                         labels[:, 1] = 1 - labels[:, 1]
 
@@ -229,19 +263,21 @@ class load_images_and_labels():  # for training
                 ud_flip = False
                 if ud_flip & (random.random() > 0.5):
                     img = np.flipud(img)
+                    if scene_flag:
+                        scene_img = np.flipud(scene_img)
                     if nL > 0:
                         labels[:, 2] = 1 - labels[:, 2]
 
             img_all.append(img)
             labels_all.append(torch.from_numpy(labels))
+            if scene_flag:
+                scene_all.append(scene_img)
 
         # Normalize
-        img_all = np.stack(img_all)[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB and cv2 to pytorch
-        img_all = np.ascontiguousarray(img_all, dtype=np.float32)
-        # img_all -= self.rgb_mean
-        # img_all /= self.rgb_std
-        img_all /= 255.0
-
+        img_all = normalize_img(img_all)
+        if scene_flag:
+            scene_all = normalize_img(scene_all)
+            return torch.from_numpy(img_all), labels_all, torch.from_numpy(scene_all)
         return torch.from_numpy(img_all), labels_all
 
     def __len__(self):

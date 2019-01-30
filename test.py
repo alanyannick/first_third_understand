@@ -50,72 +50,140 @@ def test(
     print('%11s' * 5 % ('Image', 'Total', 'P', 'R', 'mAP'))
     outputs, mAPs, mR, mP, TP, confidence, pred_class, target_class = [], [], [], [], [], [], [], []
     AP_accum, AP_accum_count = np.zeros(nC), np.zeros(nC)
-    for batch_i, (imgs, targets) in enumerate(dataloader):
+    scene_flag = True
+    if scene_flag:
+        for batch_i, (imgs, targets, scene) in enumerate(dataloader):
 
-        with torch.no_grad():
-            output = model(imgs.cuda())
-            output = non_max_suppression(output, conf_thres=conf_thres, nms_thres=nms_thres)
+            with torch.no_grad():
+                output = model(imgs.cuda())
+                output = non_max_suppression(output, conf_thres=conf_thres, nms_thres=nms_thres)
 
-        # Compute average precision for each sample
-        for sample_i, (labels, detections) in enumerate(zip(targets, output)):
-            correct = []
+            # Compute average precision for each sample
+            for sample_i, (labels, detections) in enumerate(zip(targets, output)):
+                correct = []
 
-            if detections is None:
-                # If there are no detections but there are labels mask as zero AP
-                if labels.size(0) != 0:
+                if detections is None:
+                    # If there are no detections but there are labels mask as zero AP
+                    if labels.size(0) != 0:
+                        mAPs.append(0), mR.append(0), mP.append(0)
+                    continue
+
+                # Get detections sorted by decreasing confidence scores
+                detections = detections.cpu().numpy()
+                detections = detections[np.argsort(-detections[:, 4])]
+
+                # If no labels add number of detections as incorrect
+                if labels.size(0) == 0:
+                    # correct.extend([0 for _ in range(len(detections))])
                     mAPs.append(0), mR.append(0), mP.append(0)
-                continue
+                    continue
+                else:
+                    target_cls = labels[:, 0]
 
-            # Get detections sorted by decreasing confidence scores
-            detections = detections.cpu().numpy()
-            detections = detections[np.argsort(-detections[:, 4])]
+                    # Extract target boxes as (x1, y1, x2, y2)
+                    target_boxes = xywh2xyxy(labels[:, 1:5]) * img_size
 
-            # If no labels add number of detections as incorrect
-            if labels.size(0) == 0:
-                # correct.extend([0 for _ in range(len(detections))])
-                mAPs.append(0), mR.append(0), mP.append(0)
-                continue
-            else:
-                target_cls = labels[:, 0]
+                    detected = []
+                    for *pred_bbox, conf, obj_conf, obj_pred in detections:
 
-                # Extract target boxes as (x1, y1, x2, y2)
-                target_boxes = xywh2xyxy(labels[:, 1:5]) * img_size
+                        pred_bbox = torch.FloatTensor(pred_bbox).view(1, -1)
+                        # Compute iou with target boxes
+                        iou = bbox_iou(pred_bbox, target_boxes)
+                        # Extract index of largest overlap
+                        best_i = np.argmax(iou)
+                        # If overlap exceeds threshold and classification is correct mark as correct
+                        if iou[best_i] > iou_thres and obj_pred == labels[best_i, 0] and best_i not in detected:
+                            correct.append(1)
+                            detected.append(best_i)
+                        else:
+                            correct.append(0)
 
-                detected = []
-                for *pred_bbox, conf, obj_conf, obj_pred in detections:
+                # Compute Average Precision (AP) per class
+                AP, AP_class, R, P = ap_per_class(tp=correct, conf=detections[:, 4], pred_cls=detections[:, 6],
+                                                  target_cls=target_cls)
 
-                    pred_bbox = torch.FloatTensor(pred_bbox).view(1, -1)
-                    # Compute iou with target boxes
-                    iou = bbox_iou(pred_bbox, target_boxes)
-                    # Extract index of largest overlap
-                    best_i = np.argmax(iou)
-                    # If overlap exceeds threshold and classification is correct mark as correct
-                    if iou[best_i] > iou_thres and obj_pred == labels[best_i, 0] and best_i not in detected:
-                        correct.append(1)
-                        detected.append(best_i)
-                    else:
-                        correct.append(0)
+                # Accumulate AP per class
+                AP_accum_count += np.bincount(AP_class, minlength=nC)
+                AP_accum += np.bincount(AP_class, minlength=nC, weights=AP)
 
-            # Compute Average Precision (AP) per class
-            AP, AP_class, R, P = ap_per_class(tp=correct, conf=detections[:, 4], pred_cls=detections[:, 6],
-                                              target_cls=target_cls)
+                # Compute mean AP across all classes in this image, and append to image list
+                mAPs.append(AP.mean())
+                mR.append(R.mean())
+                mP.append(P.mean())
 
-            # Accumulate AP per class
-            AP_accum_count += np.bincount(AP_class, minlength=nC)
-            AP_accum += np.bincount(AP_class, minlength=nC, weights=AP)
+                # Means of all images
+                mean_mAP = np.mean(mAPs)
+                mean_R = np.mean(mR)
+                mean_P = np.mean(mP)
 
-            # Compute mean AP across all classes in this image, and append to image list
-            mAPs.append(AP.mean())
-            mR.append(R.mean())
-            mP.append(P.mean())
+                # Print image mAP and running mean mAP
+                print(('%11s%11s' + '%11.3g' * 3) % (len(mAPs), dataloader.nF, mean_P, mean_R, mean_mAP))
+    else:
+        for batch_i, (imgs, targets) in enumerate(dataloader):
+            with torch.no_grad():
+                output = model(imgs.cuda())
+                output = non_max_suppression(output, conf_thres=conf_thres, nms_thres=nms_thres)
 
-            # Means of all images
-            mean_mAP = np.mean(mAPs)
-            mean_R = np.mean(mR)
-            mean_P = np.mean(mP)
+            # Compute average precision for each sample
+            for sample_i, (labels, detections) in enumerate(zip(targets, output)):
+                correct = []
 
-            # Print image mAP and running mean mAP
-            print(('%11s%11s' + '%11.3g' * 3) % (len(mAPs), dataloader.nF, mean_P, mean_R, mean_mAP))
+                if detections is None:
+                    # If there are no detections but there are labels mask as zero AP
+                    if labels.size(0) != 0:
+                        mAPs.append(0), mR.append(0), mP.append(0)
+                    continue
+
+                # Get detections sorted by decreasing confidence scores
+                detections = detections.cpu().numpy()
+                detections = detections[np.argsort(-detections[:, 4])]
+
+                # If no labels add number of detections as incorrect
+                if labels.size(0) == 0:
+                    # correct.extend([0 for _ in range(len(detections))])
+                    mAPs.append(0), mR.append(0), mP.append(0)
+                    continue
+                else:
+                    target_cls = labels[:, 0]
+
+                    # Extract target boxes as (x1, y1, x2, y2)
+                    target_boxes = xywh2xyxy(labels[:, 1:5]) * img_size
+
+                    detected = []
+                    for *pred_bbox, conf, obj_conf, obj_pred in detections:
+
+                        pred_bbox = torch.FloatTensor(pred_bbox).view(1, -1)
+                        # Compute iou with target boxes
+                        iou = bbox_iou(pred_bbox, target_boxes)
+                        # Extract index of largest overlap
+                        best_i = np.argmax(iou)
+                        # If overlap exceeds threshold and classification is correct mark as correct
+                        if iou[best_i] > iou_thres and obj_pred == labels[best_i, 0] and best_i not in detected:
+                            correct.append(1)
+                            detected.append(best_i)
+                        else:
+                            correct.append(0)
+
+                # Compute Average Precision (AP) per class
+                AP, AP_class, R, P = ap_per_class(tp=correct, conf=detections[:, 4], pred_cls=detections[:, 6],
+                                                  target_cls=target_cls)
+
+                # Accumulate AP per class
+                AP_accum_count += np.bincount(AP_class, minlength=nC)
+                AP_accum += np.bincount(AP_class, minlength=nC, weights=AP)
+
+                # Compute mean AP across all classes in this image, and append to image list
+                mAPs.append(AP.mean())
+                mR.append(R.mean())
+                mP.append(P.mean())
+
+                # Means of all images
+                mean_mAP = np.mean(mAPs)
+                mean_R = np.mean(mR)
+                mean_P = np.mean(mP)
+
+                # Print image mAP and running mean mAP
+                print(('%11s%11s' + '%11.3g' * 3) % (len(mAPs), dataloader.nF, mean_P, mean_R, mean_mAP))
 
     # Print mAP per class
     print('%11s' * 5 % ('Image', 'Total', 'P', 'R', 'mAP') + '\n\nmAP Per Class:')
