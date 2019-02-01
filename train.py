@@ -49,7 +49,7 @@ def train(
     # Initialize model
     # model = Darknet(net_config_path, img_size)
     model = First_Third_Net(net_config_path)
-    model.load_pretrained_weights()
+    # model.load_pretrained_weights()
     # check the model here
     print(model)
 
