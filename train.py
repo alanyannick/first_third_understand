@@ -46,9 +46,12 @@ def train(
     num_classes = int(data_config['classes'])
     train_path = data_config['train']
 
+    worker = 'detection'
     # Initialize model
-    # model = Darknet(net_config_path, img_size)
-    model = First_Third_Net(net_config_path)
+    if worker == 'detection':
+        model = Darknet(net_config_path, img_size)
+    else:
+        model = First_Third_Net(net_config_path)
     # model.load_pretrained_weights()
     # check the model here
     print(model)
@@ -164,7 +167,10 @@ def train(
                     print('Current_lr:' + str(lr))
                 # Import entrance @ yangming wen
                 # Compute loss, compute gradient, update parameters
-                loss = model(imgs.to(device), scenes.to(device), targets)
+                if worker == 'detection':
+                    loss = model(imgs.to(device), targets)
+                else:
+                    loss = model(imgs.to(device), scenes.to(device), targets)
                 loss.backward()
 
                 # accumulate gradient for x batches before optimizing
@@ -250,7 +256,8 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
     parser.add_argument('--accumulated-batches', type=int, default=1, help='number of batches before optimizer step')
     parser.add_argument('--data-config', type=str, default='cfg/coco.data', help='path to data config file')
-    parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
+    # parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
+    parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='cfg file path')
     parser.add_argument('--multi-scale', action='store_true', help='random image sizes per batch 320 - 608')
     parser.add_argument('--img-size', type=int, default=32 * 13, help='pixels')
     parser.add_argument('--weights-path', type=str, default='weights_overfit', help='path to store weights')
