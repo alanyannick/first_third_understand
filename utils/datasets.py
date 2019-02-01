@@ -90,6 +90,54 @@ class load_images():  # for inference
     def __len__(self):
         return self.nB  # number of batches
 
+class load_images_scenes():  # for inference
+    def __init__(self, path, batch_size=1, img_size=416):
+        if os.path.isdir(path):
+            image_format = ['.jpg', '.jpeg', '.png', '.tif']
+            self.files = sorted(glob.glob('%s/*.*' % path))
+            self.files = list(filter(lambda x: os.path.splitext(x)[1].lower() in image_format, self.files))
+        elif os.path.isfile(path):
+            self.files = [path]
+
+        self.nF = len(self.files)  # number of image files
+        self.nB = math.ceil(self.nF / batch_size)  # number of batches
+        self.batch_size = batch_size
+        self.height = img_size
+
+        assert self.nF > 0, 'No images found in path %s' % path
+
+        # RGB normalization values
+        # self.rgb_mean = np.array([60.134, 49.697, 40.746], dtype=np.float32).reshape((3, 1, 1))
+        # self.rgb_std = np.array([29.99, 24.498, 22.046], dtype=np.float32).reshape((3, 1, 1))
+
+    def __iter__(self):
+        self.count = -1
+        return self
+
+    def __next__(self):
+        self.count += 1
+        if self.count == self.nB:
+            raise StopIteration
+        img_path = self.files[self.count]
+        scene_path = img_path.replace('samples','scenes')
+        # Read image
+        img = cv2.imread(img_path)  # BGR
+        scene = cv2.imread(scene_path)
+        # Padded resize
+        img, _, _, _ = resize_square(img, height=self.height, color=(127.5, 127.5, 127.5))
+        scene, _, _, _ = resize_square(scene, height=self.height, color=(127.5, 127.5, 127.5))
+        # Normalize RGB
+        img = img[:, :, ::-1].transpose(2, 0, 1)
+        img = np.ascontiguousarray(img, dtype=np.float32)
+        img /= 255.0
+
+        scene = scene[:, :, ::-1].transpose(2, 0, 1)
+        scene = np.ascontiguousarray(scene, dtype=np.float32)
+        scene /= 255.0
+        return [img_path], img, scene
+
+    def __len__(self):
+        return self.nB  # number of batches
 
 class load_images_and_labels():  # for training
     def __init__(self, path, batch_size=1, img_size=608, multi_scale=False, augment=False):
