@@ -196,6 +196,9 @@ class YOLOLayer(nn.Module):
                 build_targets(p_boxes, p_conf, p_cls, targets, self.anchor_wh, self.nA, self.nC, nG, batch_report)
 
             tcls = tcls[mask]
+            if int(mask.max()) == 1:
+                print("Find the correct mask")
+
             if x.is_cuda:
                 tx, ty, tw, th, mask, tcls = tx.cuda(), ty.cuda(), tw.cuda(), th.cuda(), mask.cuda(), tcls.cuda()
 

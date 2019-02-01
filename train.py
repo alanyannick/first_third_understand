@@ -61,7 +61,7 @@ def train(
     dataloader = load_images_and_labels(train_path, batch_size=batch_size, img_size=img_size,
                                         multi_scale=multi_scale, augment=True)
 
-    lr0 = 0.001
+    lr0 = 0.1
     if resume:
         checkpoint = torch.load(latest_weights_file, map_location='cpu')
 
@@ -221,6 +221,7 @@ def train(
 
             # Update best loss
             loss_per_target = rloss['loss'] / rloss['nT']
+            # "0.33333 here means 1 / 3 anchors"
             if loss_per_target < best_loss:
                 best_loss = loss_per_target
 
@@ -248,18 +249,19 @@ def train(
                 ))
 
             # Calculate mAP
-            # mAP, R, P = test.test(
-            #     net_config_path,
-            #     data_config_path,
-            #     latest_weights_file,
-            #     batch_size=batch_size,
-            #     img_size=img_size,
-            #     gpu_choice=gpu_id,
-            # )
-            #
-            # # Write epoch results
-            # with open('results.txt', 'a') as file:
-            #     file.write(s + '%11.3g' * 3 % (mAP, P, R) + '\n')
+            mAP, R, P = test.test(
+                net_config_path,
+                data_config_path,
+                latest_weights_file,
+                batch_size=batch_size,
+                img_size=img_size,
+                gpu_choice=gpu_id,
+                worker='first'
+            )
+
+            # Write epoch results
+            with open('results.txt', 'a') as file:
+                file.write(s + '%11.3g' * 3 % (mAP, P, R) + '\n')
 
 
 if __name__ == '__main__':

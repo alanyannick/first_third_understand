@@ -3,7 +3,7 @@ import argparse
 from models import *
 from utils.datasets import *
 from utils.utils import *
-
+from networks.network import First_Third_Net
 from utils import torch_utils
 
 
@@ -18,6 +18,7 @@ def test(
         nms_thres=0.45,
         n_cpus=0,
         gpu_choice = "3",
+        worker ='first'
 ):
 
     device = torch_utils.select_device(gpu_choice=gpu_choice)
@@ -29,13 +30,18 @@ def test(
     test_path = data_config['valid']
 
     # Initiate model
-    model = Darknet(net_config_path, img_size)
+    if worker == 'detection':
+        model = Darknet(net_config_path, img_size)
+    else:
+        model = First_Third_Net(net_config_path)
+
 
     # Load weights
     if weights_file_path.endswith('.pt'):  # pytorch format
         checkpoint = torch.load(weights_file_path, map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         del checkpoint
+
     else:  # darknet format
         load_weights(model, weights_file_path)
 
@@ -52,10 +58,13 @@ def test(
     AP_accum, AP_accum_count = np.zeros(nC), np.zeros(nC)
     scene_flag = True
     if scene_flag:
-        for batch_i, (imgs, targets, scene) in enumerate(dataloader):
+        for batch_i, (imgs, targets, scenes) in enumerate(dataloader):
 
             with torch.no_grad():
-                output = model(imgs.cuda())
+                if worker == 'detection':
+                    output = model(imgs.cuda())
+                else:
+                    output = model(imgs.cuda(),scenes.cuda())
                 output = non_max_suppression(output, conf_thres=conf_thres, nms_thres=nms_thres)
 
             # Compute average precision for each sample
@@ -207,6 +216,7 @@ if __name__ == '__main__':
     parser.add_argument('--nms-thres', type=float, default=0.45, help='iou threshold for non-maximum suppression')
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
+    parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
     opt = parser.parse_args()
     print(opt, end='\n\n')
 
@@ -222,4 +232,5 @@ if __name__ == '__main__':
         conf_thres=opt.conf_thres,
         nms_thres=opt.nms_thres,
         n_cpus=opt.n_cpus,
+        worker=opt.worker
     )
