@@ -174,9 +174,9 @@ def train(
                 loss.backward()
 
                 # accumulate gradient for x batches before optimizing
-                if ((i + 1) % accumulated_batches == 0) or (i == len(dataloader) - 1):
-                    optimizer.step()
-                    optimizer.zero_grad()
+                # if ((i + 1) % accumulated_batches == 0) or (i == len(dataloader) - 1):
+                optimizer.step()
+                optimizer.zero_grad()
 
                 # Running epoch-means of tracked metrics
                 ui += 1
