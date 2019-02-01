@@ -1,14 +1,12 @@
 import argparse
 import time
 
+# Import test.py to get mAP after each epoch
+import test
 from models import *
 from utils.datasets import *
 from utils.utils import *
-
-from utils import torch_utils
-
-# Import test.py to get mAP after each epoch
-import test
+from networks.network import First_Third_Net
 
 DARKNET_WEIGHTS_FILENAME = 'darknet53.conv.74'
 DARKNET_WEIGHTS_URL = 'https://pjreddie.com/media/files/{}'.format(DARKNET_WEIGHTS_FILENAME)
@@ -49,7 +47,12 @@ def train(
     train_path = data_config['train']
 
     # Initialize model
-    model = Darknet(net_config_path, img_size)
+    # model = Darknet(net_config_path, img_size)
+    model = First_Third_Net(net_config_path)
+    model.load_pretrained_weights()
+    # check the model here
+    print(model)
+
 
     # Get dataloader
     dataloader = load_images_and_labels(train_path, batch_size=batch_size, img_size=img_size,
@@ -94,9 +97,11 @@ def train(
                     DARKNET_WEIGHTS_URL,
                     weights_path))
             assert os.path.isfile(def_weight_file)
-            load_weights(model, def_weight_file)
+            model.load_weights(def_weight_file)
+            print('Init model with Darknet53 training begin >>>>>>')
+
         else:
-            print('Init training begin >>>')
+            print('Init training begin >>>>>>')
         # if torch.cuda.device_count() > 1:
         #     raise Exception('Multi-GPU not currently supported: https://github.com/ultralytics/yolov3/issues/21')
             # print('Using ', torch.cuda.device_count(), ' GPUs')
@@ -147,7 +152,7 @@ def train(
 
         scene_flag = True
         if scene_flag:
-            for i, (imgs, targets, scene) in enumerate(dataloader):
+            for i, (imgs, targets, scenes) in enumerate(dataloader):
                 if sum([len(x) for x in targets]) < 1:  # if no targets continue
                     continue
 
@@ -157,107 +162,9 @@ def train(
                     for g in optimizer.param_groups:
                         g['lr'] = lr
                     print('Current_lr:' + str(lr))
-
-                # for g in optimizer.param_groups:
-                #     g['lr'] = 0.001
-
+                # Import entrance @ yangming wen
                 # Compute loss, compute gradient, update parameters
-                loss = model(imgs.to(device), targets, batch_report=report, var=var)
-                loss.backward()
-
-                # accumulate gradient for x batches before optimizing
-                if ((i + 1) % accumulated_batches == 0) or (i == len(dataloader) - 1):
-                    optimizer.step()
-                    optimizer.zero_grad()
-
-                # Running epoch-means of tracked metrics
-                ui += 1
-                for key, val in model.losses.items():
-                    rloss[key] = (rloss[key] * ui + val) / (ui + 1)
-
-                if report:
-                    TP, FP, FN = metrics
-                    metrics += model.losses['metrics']
-
-                    # Precision
-                    precision = TP / (TP + FP)
-                    k = (TP + FP) > 0
-                    if k.sum() > 0:
-                        mean_precision = precision[k].mean()
-
-                    # Recall
-                    recall = TP / (TP + FN)
-                    k = (TP + FN) > 0
-                    if k.sum() > 0:
-                        mean_recall = recall[k].mean()
-
-                s = ('%8s%12s' + '%10.3g' * 14) % (
-                    '%g/%g' % (epoch, epochs - 1), '%g/%g' % (i, len(dataloader) - 1), rloss['x'],
-                    rloss['y'], rloss['w'], rloss['h'], rloss['conf'], rloss['cls'],
-                    rloss['loss'], mean_precision, mean_recall, model.losses['nT'], model.losses['TP'],
-                    model.losses['FP'], model.losses['FN'], time.time() - t0)
-                t0 = time.time()
-                print(s)
-
-            # Update best loss
-            loss_per_target = rloss['loss'] / rloss['nT']
-            if loss_per_target < best_loss:
-                best_loss = loss_per_target
-
-            # Save latest checkpoint
-            checkpoint = {'epoch': epoch,
-                          'best_loss': best_loss,
-                          'model': model.state_dict(),
-                          'optimizer': optimizer.state_dict()}
-            torch.save(checkpoint, latest_weights_file)
-
-            # Save best checkpoint
-            if best_loss == loss_per_target:
-                os.system('cp {} {}'.format(
-                    latest_weights_file,
-                    best_weights_file,
-                ))
-
-            # Save backup weights every 5 epochs
-            if (epoch > 0) & (epoch % 2000 == 0):
-                backup_file_name = 'backup{}.pt'.format(epoch)
-                backup_file_path = os.path.join(weights_path, backup_file_name)
-                os.system('cp {} {}'.format(
-                    latest_weights_file,
-                    backup_file_path,
-                ))
-
-            # Calculate mAP
-            mAP, R, P = test.test(
-                net_config_path,
-                data_config_path,
-                latest_weights_file,
-                batch_size=batch_size,
-                img_size=img_size,
-                gpu_choice=gpu_id,
-            )
-
-            # Write epoch results
-            with open('results.txt', 'a') as file:
-                file.write(s + '%11.3g' * 3 % (mAP, P, R) + '\n')
-
-        else:
-            for i, (imgs, targets) in enumerate(dataloader):
-                if sum([len(x) for x in targets]) < 1:  # if no targets continue
-                    continue
-
-                # SGD burn-in
-                if (epoch == 0) & (i <= 1000):
-                    lr = lr0 * (i / 1000) ** 4
-                    for g in optimizer.param_groups:
-                        g['lr'] = lr
-                    print('Current_lr:' + str(lr))
-
-                # for g in optimizer.param_groups:
-                #     g['lr'] = 0.001
-
-                # Compute loss, compute gradient, update parameters
-                loss = model(imgs.to(device), targets, batch_report=report, var=var)
+                loss = model(imgs.to(device), scenes.to(device), targets)
                 loss.backward()
 
                 # accumulate gradient for x batches before optimizing
@@ -343,7 +250,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
     parser.add_argument('--accumulated-batches', type=int, default=1, help='number of batches before optimizer step')
     parser.add_argument('--data-config', type=str, default='cfg/coco.data', help='path to data config file')
-    parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='cfg file path')
+    parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
     parser.add_argument('--multi-scale', action='store_true', help='random image sizes per batch 320 - 608')
     parser.add_argument('--img-size', type=int, default=32 * 13, help='pixels')
     parser.add_argument('--weights-path', type=str, default='weights_overfit', help='path to store weights')
