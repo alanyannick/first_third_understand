@@ -63,7 +63,8 @@ def create_modules(module_defs):
             anchors = [(anchors[i], anchors[i + 1]) for i in range(0, len(anchors), 2)]
             anchors = [anchors[i] for i in anchor_idxs]
             num_classes = int(module_def['classes'])
-            img_height = int(hyperparams['height'])
+            # img_height = int(hyperparams['height'])
+            img_height = 13
             # Define detection layer
             yolo_layer = YOLOLayer(anchors, num_classes, img_height, anchor_idxs, cfg=hyperparams['cfg'])
             modules.add_module('yolo_%d' % i, yolo_layer)
@@ -107,16 +108,17 @@ class YOLOLayer(nn.Module):
         self.nC = nC  # number of classes (80)
         self.bbox_attrs = 5 + nC
         self.img_dim = img_dim  # from hyperparams in cfg file, NOT from parser
+        stride = img_dim / 13
 
-        if anchor_idxs[0] == (nA * 2):  # 6
-            stride = 32
-        elif anchor_idxs[0] == nA:  # 3
-            stride = 16
-        else:
-            stride = 8
-
-        if cfg.endswith('yolov3-tiny.cfg'):
-            stride *= 2
+        # if anchor_idxs[0] == (nA * 2):  # 6
+        #     stride = 32
+        # elif anchor_idxs[0] == nA:  # 3
+        #     stride = 16
+        # else:
+        #     stride = 8
+        #
+        # if cfg.endswith('yolov3-tiny.cfg'):
+        #     stride *= 2
 
         # Build anchor grids
         nG = int(self.img_dim / stride)  # number grid points
