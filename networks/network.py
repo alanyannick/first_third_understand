@@ -24,26 +24,15 @@ from models import Darknet
 import torch
 import torch.nn as nn
 import torchvision.models.resnet as resnet
-from models import load_weights
 
-class Net(nn.Module):
-    def __init__(self):
+class First_Third_Net(nn.Module):
+    def __init__(self, net_conf):
         nn.Module.__init__(self)
-
-        # Build subnets whose input is 150-channel segmentation confidence maps
-        # builder = semseg_models.ModelBuilder()
-        # segmap_weights_encoder = os.path.join(cfg['semseg']['path'], opts.segmap_model_path,'encoder' + opts.segmap_suffix)
-        # self.semseg = builder.build_encoder(
-        #     arch=opts.segmap_arch_encoder,
-        #     fc_dim=opts.segmap_fc_dim,
-        #     weights=segmap_weights_encoder)
-        #
-        # # Freeze semantic segmentation module
-        # for param in self.semseg.parameters():
-        #     param.requires_grad = False
+        dark_net_conf = net_conf.split(',')[0]
+        classifier_net_conf = net_conf.split(',')[1]
 
         # Build subnets whose input is RGB maps (images)
-        self.rgb = Darknet('../cfg/rgb-encoder.cfg')
+        self.rgb = Darknet(dark_net_conf)
 
         # Build subnets whose input is surface normal maps
         self.exo_sfn_conv = nn.Sequential(nn.Conv2d(3, 128, 9, stride=6), nn.Conv2d(128, 128, 5, stride=5))
@@ -58,7 +47,7 @@ class Net(nn.Module):
             nn.Conv2d(256, 128, 3, stride=2, padding=1))
 
         # Build classifier subnet, which takes concatted features from earlier subnets
-        self.classifier = Darknet('../cfg/classifier.cfg')
+        self.classifier = Darknet(classifier_net_conf)
         for subnet in (self.exo_sfn_conv, self.ego_ss_conv, self.exo_ss_conv, self.classifier):
             for param in subnet.parameters():
                 if param.dim() >= 4:
@@ -67,23 +56,13 @@ class Net(nn.Module):
         # Switch
         self.ss_feature_switch = False
         self.sfn_feature_switch = False
-    # @arg targets must be supplied in training and omitted in testing
-    # See yolo_v3/models.py and yolo_v3/utils/utils.py
 
-    def set_input(self, batch_dict):
-        self.targets = batch_dict.get('darknet_targets', None)
-        self.ego_rgb = batch_dict['ego_rgb'].to(opts.device)
-        self.exo_rgb = batch_dict['exo_rgb'].to(opts.device)
-        self.exo_sfn = batch_dict['exo_sfnorm'].to(opts.device)
-        self.ego_ss = batch_dict['ego_ss'].to(opts.device)
-        self.exo_ss = batch_dict['exo_ss'].to(opts.device)
+    def forward(self, ego_rgb = None, exo_rgb = None, target = None):
 
-        # Visualiza the batch datasets here
-        # ego_rgb_tensor = batch['ego_rgb']
-        # ego_rgb_image = util.tensor2im(ego_rgb_tensor)
-        # cv2.imwrite("/home/yangmingwen/first_third_person/ego.png", ego_rgb_image)
+        self.exo_rgb = exo_rgb
+        self.ego_rgb = ego_rgb
+        self.targets = target
 
-    def forward(self):
         # Darknet feature
         ego_rgb = self.rgb(self.ego_rgb)
         exo_rgb = self.rgb(self.exo_rgb)
@@ -133,6 +112,6 @@ class Net(nn.Module):
 
 
 if __name__ == '__main__':
-    net = Net()
+    net = First_Third_Net()
     net.load_pretrained_weights()
     net()
