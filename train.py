@@ -46,11 +46,11 @@ def train(
     num_classes = int(data_config['classes'])
     train_path = data_config['train']
 
-    worker = 'detection'
     # Initialize model
-    if worker == 'detection':
+    if opt.worker == 'detection':
         model = Darknet(net_config_path, img_size)
     else:
+        # here, for the rgb is 416 = 32 by 13 but for the classifier is 13 by 13
         model = First_Third_Net(net_config_path)
     # model.load_pretrained_weights()
     # check the model here
@@ -167,7 +167,7 @@ def train(
                     print('Current_lr:' + str(lr))
                 # Import entrance @ yangming wen
                 # Compute loss, compute gradient, update parameters
-                if worker == 'detection':
+                if opt.worker == 'detection':
                     loss = model(imgs.to(device), targets)
                 else:
                     loss = model(imgs.to(device), scenes.to(device), targets)
@@ -180,8 +180,12 @@ def train(
 
                 # Running epoch-means of tracked metrics
                 ui += 1
-                for key, val in model.losses.items():
-                    rloss[key] = (rloss[key] * ui + val) / (ui + 1)
+                if opt.worker == 'detection':
+                    for key, val in model.losses.items():
+                        rloss[key] = (rloss[key] * ui + val) / (ui + 1)
+                else:
+                    for key, val in model.classifier.losses.items():
+                        rloss[key] = (rloss[key] * ui + val) / (ui + 1)
 
                 if report:
                     TP, FP, FN = metrics
@@ -198,14 +202,22 @@ def train(
                     k = (TP + FN) > 0
                     if k.sum() > 0:
                         mean_recall = recall[k].mean()
-
-                s = ('%8s%12s' + '%10.3g' * 14) % (
-                    '%g/%g' % (epoch, epochs - 1), '%g/%g' % (i, len(dataloader) - 1), rloss['x'],
-                    rloss['y'], rloss['w'], rloss['h'], rloss['conf'], rloss['cls'],
-                    rloss['loss'], mean_precision, mean_recall, model.losses['nT'], model.losses['TP'],
-                    model.losses['FP'], model.losses['FN'], time.time() - t0)
-                t0 = time.time()
-                print(s)
+                if opt.worker == 'detection':
+                    s = ('%8s%12s' + '%10.3g' * 14) % (
+                        '%g/%g' % (epoch, epochs - 1), '%g/%g' % (i, len(dataloader) - 1), rloss['x'],
+                        rloss['y'], rloss['w'], rloss['h'], rloss['conf'], rloss['cls'],
+                        rloss['loss'], mean_precision, mean_recall, model.losses['nT'], model.losses['TP'],
+                        model.losses['FP'], model.losses['FN'], time.time() - t0)
+                    t0 = time.time()
+                    print(s)
+                else:
+                    s = ('%8s%12s' + '%10.3g' * 14) % (
+                        '%g/%g' % (epoch, epochs - 1), '%g/%g' % (i, len(dataloader) - 1), rloss['x'],
+                        rloss['y'], rloss['w'], rloss['h'], rloss['conf'], rloss['cls'],
+                        rloss['loss'], mean_precision, mean_recall, model.classifier.losses['nT'], model.classifier.losses['TP'],
+                        model.classifier.losses['FP'], model.classifier.losses['FN'], time.time() - t0)
+                    t0 = time.time()
+                    print(s)
 
             # Update best loss
             loss_per_target = rloss['loss'] / rloss['nT']
@@ -236,18 +248,18 @@ def train(
                 ))
 
             # Calculate mAP
-            mAP, R, P = test.test(
-                net_config_path,
-                data_config_path,
-                latest_weights_file,
-                batch_size=batch_size,
-                img_size=img_size,
-                gpu_choice=gpu_id,
-            )
-
-            # Write epoch results
-            with open('results.txt', 'a') as file:
-                file.write(s + '%11.3g' * 3 % (mAP, P, R) + '\n')
+            # mAP, R, P = test.test(
+            #     net_config_path,
+            #     data_config_path,
+            #     latest_weights_file,
+            #     batch_size=batch_size,
+            #     img_size=img_size,
+            #     gpu_choice=gpu_id,
+            # )
+            #
+            # # Write epoch results
+            # with open('results.txt', 'a') as file:
+            #     file.write(s + '%11.3g' * 3 % (mAP, P, R) + '\n')
 
 
 if __name__ == '__main__':
@@ -256,16 +268,17 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
     parser.add_argument('--accumulated-batches', type=int, default=1, help='number of batches before optimizer step')
     parser.add_argument('--data-config', type=str, default='cfg/coco.data', help='path to data config file')
-    # parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
-    parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='cfg file path')
+    parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
+    # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='cfg file path')
     parser.add_argument('--multi-scale', action='store_true', help='random image sizes per batch 320 - 608')
-    parser.add_argument('--img-size', type=int, default=32 * 13, help='pixels')
-    parser.add_argument('--weights-path', type=str, default='weights_overfit', help='path to store weights')
+    parser.add_argument('--img_size_extra', type=int, default=32 * 13, help='pixels')
+    parser.add_argument('--weights-path', type=str, default='weights_overfit_first_third_scene', help='path to store weights')
     parser.add_argument('--resume', action='store_true', help='resume training flag')
     parser.add_argument('--report', action='store_true', help='report TP, FP, FN, P and R per batch (slower)')
     parser.add_argument('--freeze', action='store_true', help='freeze darknet53.conv.74 layers for first epoch')
     parser.add_argument('--var', type=float, default=0, help='optional test variable')
     parser.add_argument('--gpu_id', type=str, default='3', help='optional test variable')
+    parser.add_argument('--worker', type=str, default='first', help='detection or first-person video understand')
     opt = parser.parse_args()
     print(opt, end='\n\n')
 
@@ -275,7 +288,7 @@ if __name__ == '__main__':
     train(
         opt.cfg,
         opt.data_config,
-        img_size=opt.img_size,
+        img_size=opt.img_size_extra,
         resume=opt.resume,
         epochs=opt.epochs,
         batch_size=opt.batch_size,

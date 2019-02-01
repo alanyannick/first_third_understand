@@ -47,7 +47,7 @@ class First_Third_Net(nn.Module):
             nn.Conv2d(256, 128, 3, stride=2, padding=1))
 
         # Build classifier subnet, which takes concatted features from earlier subnets
-        self.classifier = Darknet(classifier_net_conf)
+        self.classifier = Darknet(classifier_net_conf, img_size=13)
         for subnet in (self.exo_sfn_conv, self.ego_ss_conv, self.exo_ss_conv, self.classifier):
             for param in subnet.parameters():
                 if param.dim() >= 4:
@@ -99,7 +99,7 @@ class First_Third_Net(nn.Module):
         _3chan_darknets = [self.rgb]
         for subnet in _3chan_darknets:
             subnet.load_weights(
-                fpath)  # I checked the efficacy of this by ensuring a difference between the two printed lines from: (for p in subnet.parameters(): break); print(p.mean(), p.std()); subnet.load_weights(fpath); print(p.mean(), p.std())
+                fpath)
 
     def load(self, savedir):
         self.backbone.load_weights(os.path.join(savedir, 'backbone'))
