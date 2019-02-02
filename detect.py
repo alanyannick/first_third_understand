@@ -4,7 +4,7 @@ import time
 from models import *
 from utils.datasets import *
 from utils.utils import *
-
+from networks.network import First_Third_Net
 from utils import torch_utils
 
 
@@ -20,6 +20,7 @@ def detect(
         nms_thres=0.45,
         save_txt=True,
         save_images=True,
+        worker='first'
 ):
     device = torch_utils.select_device()
     print("Using device: \"{}\"".format(device))
@@ -30,7 +31,10 @@ def detect(
     data_config = parse_data_config(data_config_path)
 
     # Load model
-    model = Darknet(net_config_path, img_size)
+    if worker == 'detection':
+        model = Darknet(net_config_path, img_size)
+    else:
+        model = First_Third_Net(net_config_path)
 
     if weights_file_path.endswith('.pt'):  # pytorch format
         if weights_file_path.endswith('weights/yolov3.pt') and not os.path.isfile(weights_file_path):
@@ -56,22 +60,24 @@ def detect(
 
     # Set Dataloader
     classes = load_classes(data_config['names'])  # Extracts class labels from file
-    dataloader = load_images(images_path, batch_size=batch_size, img_size=img_size)
+    # dataloader = load_images(images_path, batch_size=batch_size, img_size=img_size)
+    dataloader = load_images_scenes(images_path, batch_size=batch_size, img_size=img_size)
 
     imgs = []  # Stores image paths
     img_detections = []  # Stores detections for each image index
     prev_time = time.time()
-    for i, (img_paths, img) in enumerate(dataloader):
+    for i, (img_paths, img, scene) in enumerate(dataloader):
         print('%g/%g' % (i + 1, len(dataloader)), end=' ')
 
         # Get detections
         with torch.no_grad():
             # cv2.imwrite('zidane_416.jpg', 255 * img.transpose((1, 2, 0))[:, :, ::-1])  # letterboxed
             img = torch.from_numpy(img).unsqueeze(0).cuda()
+            scene = torch.from_numpy(scene).unsqueeze(0).cuda()
             if ONNX_EXPORT:
                 pred = torch.onnx._export(model, img, 'weights/model.onnx', verbose=True);
                 return  # ONNX export
-            pred = model(img)
+            pred = model(img, scene)
             pred = pred[pred[:, :, 4] > conf_thres]
 
             if len(pred) > 0:
@@ -154,9 +160,10 @@ if __name__ == '__main__':
     parser.add_argument('--output-folder', type=str, default='output', help='path to outputs')
     parser.add_argument('--plot-flag', type=bool, default=True)
     parser.add_argument('--txt-out', type=bool, default=False)
-    parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='cfg file path')
+    parser.add_argument('--weights', type=str, default='weights_overfit_first_third_scene/latest.pt',
+                        help='path to weights file')
     parser.add_argument('--data-config', type=str, default='cfg/coco.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weights_overfit/backup29800.pt', help='path to weights file')
+    parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
     parser.add_argument('--conf-thres', type=float, default=0.0, help='object confidence threshold')
     parser.add_argument('--nms-thres', type=float, default=0.0, help='iou threshold for non-maximum suppression')
     parser.add_argument('--batch-size', type=int, default=1, help='size of the batches')
