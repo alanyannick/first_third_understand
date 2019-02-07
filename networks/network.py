@@ -47,7 +47,7 @@ class First_Third_Net(nn.Module):
             nn.Conv2d(256, 128, 3, stride=2, padding=1))
 
         # Build classifier subnet, which takes concatted features from earlier subnets
-        self.classifier = Darknet(classifier_net_conf, img_size=13)
+        self.classifier = Darknet(classifier_net_conf)
         for subnet in (self.exo_sfn_conv, self.ego_ss_conv, self.exo_ss_conv, self.classifier):
             for param in subnet.parameters():
                 if param.dim() >= 4:
@@ -89,8 +89,8 @@ class First_Third_Net(nn.Module):
         concatted_features = torch.cat([ego_cat, exo_cat], 1)
         # @Verify the config file channel here
         # print(concatted_features.shape)
-        loss = self.classifier(concatted_features, self.targets)
-
+        # Note here, the targets dimension should be 1,1,5
+        loss = self.classifier(concatted_features, self.targets[0].unsqueeze(0))
         return loss
 
     # This function is for loading 3rd-party weights, not for weights that you have saved. It will only load weights into the rgb and sfn sub-networks.
@@ -101,14 +101,6 @@ class First_Third_Net(nn.Module):
             subnet.load_weights(
                 fpath)
 
-    def load(self, savedir):
-        self.backbone.load_weights(os.path.join(savedir, 'backbone'))
-        self.rgb_1st.load_weights(os.path.join(savedir, 'rgb_1st'))
-        self.rgb_3rd.load_weights(os.path.join(savedir, 'rgb_3rd'))
-        self.sfn_1st.load_weights(os.path.join(savedir, 'sfn_1st'))
-        self.sfn_3rd.load_weights(os.path.join(savedir, 'sfn_3rd'))
-        self.segmap_1st.load_weights(os.path.join(savedir, 'segmap_1st'))
-        self.segmap_3rd.load_weights(os.path.join(savedir, 'segmap_3rd'))
 
 
 if __name__ == '__main__':
