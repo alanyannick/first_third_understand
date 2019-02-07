@@ -284,17 +284,17 @@ class load_images_and_labels():  # for training
                     scene_img, _, _ = random_affine(scene_img, labels, degrees=(-5, 5), translate=(0.10, 0.10),
                                                    scale=(0.90, 1.10))
             # plot flag here @yangming
-            plotFlag = False
-            if plotFlag:
-                import matplotlib.pyplot as plt
-                plt.figure(figsize=(10, 10)) if index == 0 else None
-                plt.subplot(4, 4, index + 1).imshow(img[:, :, ::-1])
-                plt.plot(labels[:, [1, 3, 3, 1, 1]].T, labels[:, [2, 2, 4, 4, 2]].T, '.-')
-                plt.axis('off')
+            # plotFlag = False
+            # if plotFlag:
+            #     import matplotlib.pyplot as plt
+            #     plt.figure(figsize=(10, 10)) if index == 0 else None
+            #     plt.subplot(4, 4, index + 1).imshow(img[:, :, ::-1])
+            #     plt.plot(labels[:, [1, 3, 3, 1, 1]].T, labels[:, [2, 2, 4, 4, 2]].T, '.-')
+            #     plt.axis('off')
 
             nL = len(labels)
             if nL > 0:
-                # convert xyxy to xywh
+                # convert xyxy to CxCywh
                 labels[:, 1:5] = xyxy2xywh(labels[:, 1:5].copy()) / height
 
             if self.augment:

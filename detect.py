@@ -74,9 +74,6 @@ def detect(
             # cv2.imwrite('zidane_416.jpg', 255 * img.transpose((1, 2, 0))[:, :, ::-1])  # letterboxed
             img = torch.from_numpy(img).unsqueeze(0).cuda()
             scene = torch.from_numpy(scene).unsqueeze(0).cuda()
-            if ONNX_EXPORT:
-                pred = torch.onnx._export(model, img, 'weights/model.onnx', verbose=True);
-                return  # ONNX export
             pred = model(img, scene)
             pred = pred[pred[:, :, 4] > conf_thres]
 
