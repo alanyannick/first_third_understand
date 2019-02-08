@@ -10,43 +10,14 @@ import collections
 import math
 from torch.autograd import Variable
 import torch.nn as nn
-
-import time
-import logging
-
-class Clock(object):
-	def __init__(self, is_auto=True, loglevel=logging.VERBOSE):
-		self.tics = []
-		self.tictocs = []
-		self.is_auto = is_auto
-		self.loglevel = loglevel
-	def is_active(self):
-		return self.loglevel >= logging.getLogger().getEffectiveLevel()
-	def tic(self):
-		if self.is_active(): self.tics.append(time.time())
-	def toc(self, msg=None):
-		if not self.is_active(): return
-		toc = time.time()
-		tic = self.tics.pop()
-		tictoc = toc - tic
-		self.tictocs.append(tictoc)
-		if self.is_auto: self.out(msg)
-		return self.msg(msg)
-	def msg(self, msg):
-		if not self.is_active(): return
-		msg = ('tictoc %s' % msg) if isinstance(msg, str) else 'tictoc'
-		return '{} {}'.format(msg, self.tictocs[-1])
-	def out(self, msg):
-		if not self.is_active(): return
-		logging.log(self.loglevel, self.msg(msg))
-
+import cv2
 # Converts a Tensor into a Numpy array
 # |imtype|: the desired type of the converted numpy array
 def tensor2im(image_tensor, imtype=np.uint8, channel=0):
     image_numpy = image_tensor[channel].cpu().float().numpy()
     if image_numpy.shape[0] == 1:
         image_numpy = np.tile(image_numpy, (3,1,1))
-    image_numpy = (np.transpose(image_numpy, (1, 2, 0)) + 1) / 2.0 * 255.0
+    image_numpy = cv2.cvtColor(np.transpose(image_numpy, (1, 2, 0)) * 255.0, cv2.COLOR_RGB2BGR)
     return image_numpy.astype(imtype)
 
 
