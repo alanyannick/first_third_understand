@@ -114,8 +114,9 @@ class YOLOLayer(nn.Module):
         self.mse_loss = nn.MSELoss(size_average=True)  # Coordinate loss
         self.bce_loss = nn.BCELoss(size_average=True)  # Confidence loss
         self.ce_loss = nn.CrossEntropyLoss()  # Class loss
+        self.bbox_predict = 0
 
-    def forward(self, x, targets_all=None):
+    def forward(self, x, targets_all=None,):
         targets = targets_all[0]
         nA = self.num_anchors
         nB = x.size(0)
@@ -219,7 +220,9 @@ class YOLOLayer(nn.Module):
             print('Conf:')
             print(pred_conf[conf_mask_true].view(nB, 1))
             print('Cls:')
-            print(pred_cls[mask])
+            self.label_predict = torch.argmax(pred_cls[mask])
+            print(self.label_predict)
+            self.bbox_predict = [self.label_predict, pred_boxes[mask][0]]
             loss_cls = (1 / nB) * self.ce_loss(pred_cls[mask], torch.argmax(tcls[mask], 1))
             loss = loss_x + loss_y + loss_w + loss_h + loss_conf + loss_cls
 
@@ -233,6 +236,7 @@ class YOLOLayer(nn.Module):
                 loss_cls.item(),
                 recall,
                 precision,
+                self.bbox_predict,
             )
 
         else:
@@ -262,6 +266,7 @@ class Darknet(nn.Module):
         self.seen = 0
         self.header_info = np.array([0, 0, 0, self.seen, 0])
         self.loss_names = ["x", "y", "w", "h", "conf", "cls", "recall", "precision"]
+        self.pred_bbox = []
 
     def forward(self, x, targets=None):
         is_training = targets is not None
@@ -282,7 +287,8 @@ class Darknet(nn.Module):
                 is_training = True  #targets[1]
                 # Train phase: get loss
                 if is_training:
-                    x, *losses = module[0](x, targets) # every yolo layer (unless it's the end of the network) is followed by a "route" layer, so the "x" here doesn't get used as an input to any layer
+                    # x, *losses = module[0](x, targets)
+                    x, *losses, self.pred_bbox = module[0](x, targets) # every yolo layer (unless it's the end of the network) is followed by a "route" layer, so the "x" here doesn't get used as an input to any layer
                     for name, loss in zip(self.loss_names, losses):
                         self.losses[name] += loss
                 # Test phase: Get detections
@@ -304,8 +310,6 @@ class Darknet(nn.Module):
         self.losses["precision"] /= 3
         if len(output):
             if is_training:
-                #print('abc')
-                #print(output)
                 return sum(output) # Return loss
             else:
                 return torch.cat(output, 1) # \Return predictions
