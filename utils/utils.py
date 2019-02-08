@@ -52,11 +52,16 @@ def class_weights():  # frequency of each class in coco train2014
 def draw_bounding_box(image, bbox, thickness=1):
     WHITE = (255, 255, 255)
     bx, by, bw, bh = tuple(bbox)
+    bx = int(bx)
+    by = int(by)
+    bw = int(bw)
+    bh = int(bh)
     cv2.line(image, (bx, by), (bx + bw, by), WHITE, thickness)
     cv2.line(image, (bx, by), (bx, by + bh), WHITE, thickness)
     cv2.line(image, (bx, by + bh), (bx + bw, by + bh), WHITE, thickness)
     cv2.line(image, (bx + bw, by), (bx + bw, by + bh), WHITE, thickness)
     cv2.imwrite('/home/yangmingwen/first_third_person/result.jpg', image)
+    return image
 
 
 def plot_one_box(x, img, color=None, label=None, line_thickness=None):  # Plots one bounding box on image img
