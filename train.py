@@ -64,7 +64,6 @@ def train(
     lr0 = 0.1
     if resume:
         checkpoint = torch.load(latest_weights_file, map_location='cpu')
-
         model.load_state_dict(checkpoint['model'])
         # if torch.cuda.device_count() > 1:
             # raise Exception('Multi-GPU not currently supported: https://github.com/ultralytics/yolov3/issues/21')
@@ -84,7 +83,6 @@ def train(
         if checkpoint['optimizer'] is not None:
             optimizer.load_state_dict(checkpoint['optimizer'])
             best_loss = checkpoint['best_loss']
-
         del checkpoint  # current, saved
 
     else:
@@ -122,13 +120,11 @@ def train(
     mean_recall, mean_precision = 0, 0
     for epoch in range(epochs):
         epoch += start_epoch
-
         print(('%8s%12s' + '%10s' * 14) % ('Epoch', 'Batch', 'x', 'y', 'w', 'h', 'conf', 'cls', 'total', 'P', 'R',
                                            'nTargets', 'TP', 'FP', 'FN', 'time'))
 
         # Update scheduler (automatic)
         # scheduler.step()
-
         # Update scheduler (manual)  at 0, 54, 61 epochs to 1e-3, 1e-4, 1e-5
         if epoch > 50:
             lr = lr0 / 10
@@ -220,7 +216,9 @@ def train(
                     print(s)
 
             # Update best loss
-            loss_per_target = rloss['loss'] / rloss['nT']
+            # Default NT = 1
+            # loss_per_target = rloss['loss'] / rloss['nT']
+            loss_per_target = rloss['loss'] / 1
             # "0.33333 here means 1 / 3 anchors"
             if loss_per_target < best_loss:
                 best_loss = loss_per_target
@@ -249,19 +247,19 @@ def train(
                 ))
 
             # Calculate mAP
-            mAP, R, P = test.test(
-                net_config_path,
-                data_config_path,
-                latest_weights_file,
-                batch_size=batch_size,
-                img_size=img_size,
-                gpu_choice=gpu_id,
-                worker='first'
-            )
+            # mAP, R, P = test.test(
+            #     net_config_path,
+            #     data_config_path,
+            #     latest_weights_file,
+            #     batch_size=batch_size,
+            #     img_size=img_size,
+            #     gpu_choice=gpu_id,
+            #     worker='first'
+            # )
 
             # Write epoch results
-            with open('results.txt', 'a') as file:
-                file.write(s + '%11.3g' * 3 % (mAP, P, R) + '\n')
+            # with open('results.txt', 'a') as file:
+            #     file.write(s + '%11.3g' * 3 % (mAP, P, R) + '\n')
 
 
 if __name__ == '__main__':
@@ -274,12 +272,12 @@ if __name__ == '__main__':
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='cfg file path')
     parser.add_argument('--multi-scale', action='store_true', help='random image sizes per batch 320 - 608')
     parser.add_argument('--img_size_extra', type=int, default=32 * 13, help='pixels')
-    parser.add_argument('--weights-path', type=str, default='weights_overfit_first_third_scene', help='path to store weights')
+    parser.add_argument('--weights-path', type=str, default='weight_overfit_one_frame_2_1', help='path to store weights')
     parser.add_argument('--resume', action='store_true', help='resume training flag')
     parser.add_argument('--report', action='store_true', help='report TP, FP, FN, P and R per batch (slower)')
     parser.add_argument('--freeze', action='store_true', help='freeze darknet53.conv.74 layers for first epoch')
     parser.add_argument('--var', type=float, default=0, help='optional test variable')
-    parser.add_argument('--gpu_id', type=str, default='3', help='optional test variable')
+    parser.add_argument('--gpu_id', type=str, default='3', help='optional gpu variable')
     parser.add_argument('--worker', type=str, default='first', help='detection or first-person video understand')
     opt = parser.parse_args()
     print(opt, end='\n\n')

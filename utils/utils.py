@@ -1,5 +1,5 @@
 import random
-
+import math
 import cv2
 import numpy as np
 import torch
@@ -211,100 +211,83 @@ def bbox_iou(box1, box2, x1y1x2y2=True):
     return inter_area / (b1_area + b2_area - inter_area + 1e-16)
 
 
-def build_targets(pred_boxes, pred_conf, pred_cls, target, anchor_wh, nA, nC, nG, batch_report):
-    """
-    returns nT, nCorrect, tx, ty, tw, th, tconf, tcls
-    """
-    nB = len(target)  # number of images in batch
-    nT = [len(x) for x in target]  # torch.argmin(target[:, :, 4], 1)  # targets per image
-    tx = torch.zeros(nB, nA, nG, nG)  # batch size (4), number of anchors (3), number of grid points (13)
+def build_targets(
+    pred_boxes, pred_conf, pred_cls, target, anchors, num_anchors, num_classes, grid_size, ignore_thres, img_dim
+):
+    nB = target.size(0)
+    nA = num_anchors
+    nC = num_classes
+    nG = grid_size
+    mask = torch.zeros(nB, nA, nG, nG)
+    conf_mask = torch.ones(nB, nA, nG, nG)
+    tx = torch.zeros(nB, nA, nG, nG)
     ty = torch.zeros(nB, nA, nG, nG)
     tw = torch.zeros(nB, nA, nG, nG)
     th = torch.zeros(nB, nA, nG, nG)
     tconf = torch.ByteTensor(nB, nA, nG, nG).fill_(0)
-    tcls = torch.ByteTensor(nB, nA, nG, nG, nC).fill_(0)  # nC = number of classes
-    TP = torch.ByteTensor(nB, max(nT)).fill_(0)
-    FP = torch.ByteTensor(nB, max(nT)).fill_(0)
-    FN = torch.ByteTensor(nB, max(nT)).fill_(0)
-    TC = torch.ShortTensor(nB, max(nT)).fill_(-1)  # target category
+    tcls = torch.ByteTensor(nB, nA, nG, nG, nC).fill_(0)
 
+    nGT = 0
+    nCorrect = 0
     for b in range(nB):
-        nTb = nT[b]  # number of targets
-        if nTb == 0:
-            continue
-        t = target[b]
-
-        # Convert to position relative to box
-        TC[b, :nTb], gx, gy, gw, gh = t[:, 0].long(), t[:, 1] * nG, t[:, 2] * nG, t[:, 3] * nG, t[:, 4] * nG
-        # Get grid box indices and prevent overflows (i.e. 13.01 on 13 anchors)
-        gi = torch.clamp(gx.long(), min=0, max=nG - 1)
-        gj = torch.clamp(gy.long(), min=0, max=nG - 1)
-
-        # iou of targets-anchors (using wh only)
-        box1 = t[:, 3:5] * nG
-        box2 = anchor_wh.unsqueeze(1)
-        inter_area = torch.min(box1, box2).prod(2)
-        iou = inter_area / (gw * gh + box2.prod(2) - inter_area + 1e-16)
-
-        # Select best iou_pred and anchor
-        iou_best, a = iou.max(0)  # best anchor [0-2] for each target
-
-        # Select best unique target-anchor combinations
-        if nTb > 1:
-            iou_order = torch.argsort(-iou_best)  # best to worst
-
-            # Unique anchor selection
-            u = torch.cat((gi, gj, a), 0).view(3, -1)
-            _, first_unique = np.unique(u[:, iou_order], axis=1, return_index=True)  # first unique indices
-            # _, first_unique = torch.unique(u[:, iou_order], dim=1, return_inverse=True)  # different than numpy?
-
-            i = iou_order[first_unique]
-            # best anchor must share significant commonality (iou) with target
-            i = i[iou_best[i] > 0.10]
-            if len(i) == 0:
+        for t in range(target.shape[1]):
+            if target[b, t].sum() == 0:
                 continue
+            nGT += 1
+            #print('max')
+            #print(torch.argmax(pred_conf,0))
+            #max_ind= torch.argmax(pred_conf[b])
+            #mask[b].view(-1)[max_ind]=1
+            #conf_mask[b].view(-1)[max_ind]=1
+            # Convert to position relative to box
+            gx = target[b, t, 1] * nG
+            gy = target[b, t, 2] * nG
+            gw = target[b, t, 3] * nG
+            gh = target[b, t, 4] * nG
+            # Get grid box indices
+            gi = int(gx)
+            gj = int(gy)
+            # Get shape of gt box
+            gt_box = torch.FloatTensor(np.array([0, 0, gw, gh])).unsqueeze(0)
+            # Get shape of anchor box
+            anchor_shapes = torch.FloatTensor(np.concatenate((np.zeros((len(anchors), 2)), np.array(anchors)), 1))
+            # Calculate iou between gt and anchor shapes
+            anch_ious = bbox_iou(gt_box, anchor_shapes)
+            # Where the overlap is larger than threshold set mask to zero (ignore)
+            conf_mask[b, anch_ious > ignore_thres, gj, gi] = 0
+            # Find the best matching anchor box
+            best_n = np.argmax(anch_ious)
+            # Get ground truth box
+            gt_box = torch.FloatTensor(np.array([gx, gy, gw, gh])).unsqueeze(0)
+            #print(gt_box)
+            # Get the best prediction
+            pred_box = pred_boxes[b, best_n, gj, gi].unsqueeze(0)
+            #print(pred_box)
+            # Masks
+            mask[b, best_n, gj, gi] = 1
+            conf_mask[b, best_n, gj, gi] = 1
+            # Coordinates
+            tx[b, best_n, gj, gi] = gx - gi
+            ty[b, best_n, gj, gi] = gy - gj
+            # Width and height
+            tw[b, best_n, gj, gi] = math.log(gw / anchors[best_n][0] + 1e-16)
+            th[b, best_n, gj, gi] = math.log(gh / anchors[best_n][1] + 1e-16)
+            # One-hot encoding of label
+            target_label = int(target[b, t, 0])
+            tcls[b, best_n, gj, gi, target_label] = 1
+            tconf[b, best_n, gj, gi] = 1
 
-            a, gj, gi, t = a[i], gj[i], gi[i], t[i]
-            if len(t.shape) == 1:
-                t = t.view(1, 5)
-        else:
-            if iou_best < 0.10:
-                continue
-            i = 0
+            # Calculate iou between ground truth and best matching prediction
+            iou = bbox_iou(gt_box, pred_box, x1y1x2y2=False)
+            pred_label = torch.argmax(pred_cls[b, best_n, gj, gi])
+            score = pred_conf[b, best_n, gj, gi]
+            if iou > 0.5 and pred_label == target_label and score > 0.5:
+                nCorrect += 1
 
-        tc, gx, gy, gw, gh = t[:, 0].long(), t[:, 1] * nG, t[:, 2] * nG, t[:, 3] * nG, t[:, 4] * nG
-
-        # Coordinates
-        tx[b, a, gj, gi] = gx - gi.float()
-        ty[b, a, gj, gi] = gy - gj.float()
-
-        # Width and height (yolo method)
-        tw[b, a, gj, gi] = torch.log(gw / anchor_wh[a, 0])
-        th[b, a, gj, gi] = torch.log(gh / anchor_wh[a, 1])
-
-        # Width and height (power method)
-        # tw[b, a, gj, gi] = torch.sqrt(gw / anchor_wh[a, 0]) / 2
-        # th[b, a, gj, gi] = torch.sqrt(gh / anchor_wh[a, 1]) / 2
-
-        # One-hot encoding of label
-        tcls[b, a, gj, gi, tc] = 1
-        tconf[b, a, gj, gi] = 1
-
-        if batch_report:
-            # predicted classes and confidence
-            tb = torch.cat((gx - gw / 2, gy - gh / 2, gx + gw / 2, gy + gh / 2)).view(4, -1).t()  # target boxes
-            pcls = torch.argmax(pred_cls[b, a, gj, gi], 1).cpu()
-            pconf = torch.sigmoid(pred_conf[b, a, gj, gi]).cpu()
-            iou_pred = bbox_iou(tb, pred_boxes[b, a, gj, gi].cpu())
-
-            TP[b, i] = (pconf > 0.5) & (iou_pred > 0.5) & (pcls == tc)
-            FP[b, i] = (pconf > 0.5) & (TP[b, i] == 0)  # coordinates or class are wrong
-            FN[b, i] = pconf <= 0.5  # confidence score is too low (set to zero)
-
-    return tx, ty, tw, th, tconf, tcls, TP, FP, FN, TC
+    return nGT, nCorrect, mask, conf_mask, tx, ty, tw, th, tconf, tcls
 
 
-def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.4):
+def non_max_suppression(prediction, num_classes, conf_thres=0.5, nms_thres=0.4):
     """
     Removes detections with lower object confidence score than 'conf_thres' and performs
     Non-Maximum Suppression to further filter detections.
@@ -312,116 +295,57 @@ def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.4):
         (x1, y1, x2, y2, object_conf, class_score, class_pred)
     """
 
+    # From (center x, center y, width, height) to (x1, y1, x2, y2)
+    box_corner = prediction.new(prediction.shape)
+    box_corner[:, :, 0] = prediction[:, :, 0] - prediction[:, :, 2] / 2
+    box_corner[:, :, 1] = prediction[:, :, 1] - prediction[:, :, 3] / 2
+    box_corner[:, :, 2] = prediction[:, :, 0] + prediction[:, :, 2] / 2
+    box_corner[:, :, 3] = prediction[:, :, 1] + prediction[:, :, 3] / 2
+    prediction[:, :, :4] = box_corner[:, :, :4]
+
     output = [None for _ in range(len(prediction))]
-    for image_i, pred in enumerate(prediction):
+    for image_i, image_pred in enumerate(prediction):
         # Filter out confidence scores below threshold
-        # Get score and class with highest confidence
-
-        # cross-class NMS (experimental)
-        cross_class_nms = False
-        if cross_class_nms:
-            a = pred.clone()
-            _, indices = torch.sort(-a[:, 4], 0)  # sort best to worst
-            a = a[indices]
-            radius = 30  # area to search for cross-class ious
-            for i in range(len(a)):
-                if i >= len(a) - 1:
-                    break
-
-                close = (torch.abs(a[i, 0] - a[i + 1:, 0]) < radius) & (torch.abs(a[i, 1] - a[i + 1:, 1]) < radius)
-                close = close.nonzero()
-
-                if len(close) > 0:
-                    close = close + i + 1
-                    iou = bbox_iou(a[i:i + 1, :4], a[close.squeeze(), :4].reshape(-1, 4), x1y1x2y2=False)
-                    bad = close[iou > nms_thres]
-
-                    if len(bad) > 0:
-                        mask = torch.ones(len(a)).type(torch.ByteTensor)
-                        mask[bad] = 0
-                        a = a[mask]
-            pred = a
-
-        # Experiment: Prior class size rejection
-        # x, y, w, h = pred[:, 0], pred[:, 1], pred[:, 2], pred[:, 3]
-        # a = w * h  # area
-        # ar = w / (h + 1e-16)  # aspect ratio
-        # n = len(w)
-        # log_w, log_h, log_a, log_ar = torch.log(w), torch.log(h), torch.log(a), torch.log(ar)
-        # shape_likelihood = np.zeros((n, 60), dtype=np.float32)
-        # x = np.concatenate((log_w.reshape(-1, 1), log_h.reshape(-1, 1)), 1)
-        # from scipy.stats import multivariate_normal
-        # for c in range(60):
-        # shape_likelihood[:, c] = multivariate_normal.pdf(x, mean=mat['class_mu'][c, :2], cov=mat['class_cov'][c, :2, :2])
-
-        class_prob, class_pred = torch.max(F.softmax(pred[:, 5:], 1), 1)
-
-        v = ((pred[:, 4] > conf_thres) & (class_prob > .3))  # TODO examine arbitrary 0.3 thres here
-        v = v.nonzero().squeeze()
-        if len(v.shape) == 0:
-            v = v.unsqueeze(0)
-
-        pred = pred[v]
-        class_prob = class_prob[v]
-        class_pred = class_pred[v]
-
+        conf_mask = (image_pred[:, 4] >= conf_thres).squeeze()
+        image_pred = image_pred[conf_mask]
         # If none are remaining => process next image
-        nP = pred.shape[0]
-        if not nP:
+        if not image_pred.size(0):
             continue
-
-        # From (center x, center y, width, height) to (x1, y1, x2, y2)
-        pred[:, :4] = xywh2xyxy(pred[:, :4])
-
-        # Detections ordered as (x1, y1, x2, y2, obj_conf, class_prob, class_pred)
-        detections = torch.cat((pred[:, :5], class_prob.float().unsqueeze(1), class_pred.float().unsqueeze(1)), 1)
+        # Get score and class with highest confidence
+        class_conf, class_pred = torch.max(image_pred[:, 5 : 5 + num_classes], 1, keepdim=True)
+        # Detections ordered as (x1, y1, x2, y2, obj_conf, class_conf, class_pred)
+        detections = torch.cat((image_pred[:, :5], class_conf.float(), class_pred.float()), 1)
         # Iterate through all predicted classes
         unique_labels = detections[:, -1].cpu().unique()
         if prediction.is_cuda:
-            unique_labels = unique_labels.cuda(prediction.device)
-
-        nms_style = 'OR'  # 'AND' or 'OR' (classical)
+            unique_labels = unique_labels.cuda()
         for c in unique_labels:
             # Get the detections with the particular class
-            det_class = detections[detections[:, -1] == c]
+            detections_class = detections[detections[:, -1] == c]
             # Sort the detections by maximum objectness confidence
-            _, conf_sort_index = torch.sort(det_class[:, 4], descending=True)
-            det_class = det_class[conf_sort_index]
+            _, conf_sort_index = torch.sort(detections_class[:, 4], descending=True)
+            detections_class = detections_class[conf_sort_index]
             # Perform non-maximum suppression
-            det_max = []
+            max_detections = []
+            while detections_class.size(0):
+                # Get detection with highest confidence and save as max detection
+                max_detections.append(detections_class[0].unsqueeze(0))
+                # Stop if we're at the last detection
+                if len(detections_class) == 1:
+                    break
+                # Get the IOUs for all boxes with lower confidence
+                ious = bbox_iou(max_detections[-1], detections_class[1:])
+                # Remove detections with IoU >= NMS threshold
+                detections_class = detections_class[1:][ious < nms_thres]
 
-            if nms_style == 'OR':  # Classical NMS
-                while det_class.shape[0]:
-                    # Get detection with highest confidence and save as max detection
-                    det_max.append(det_class[0].unsqueeze(0))
-                    # Stop if we're at the last detection
-                    if len(det_class) == 1:
-                        break
-                    # Get the IOUs for all boxes with lower confidence
-                    ious = bbox_iou(det_max[-1], det_class[1:])
-
-                    # Remove detections with IoU >= NMS threshold
-                    det_class = det_class[1:][ious < nms_thres]
-
-            elif nms_style == 'AND':  # 'AND'-style NMS: >=2 boxes must share commonality to pass, single boxes erased
-                while det_class.shape[0]:
-                    if len(det_class) == 1:
-                        break
-
-                    ious = bbox_iou(det_class[:1], det_class[1:])
-
-                    if ious.max() > 0.5:
-                        det_max.append(det_class[0].unsqueeze(0))
-
-                    # Remove detections with IoU >= NMS threshold
-                    det_class = det_class[1:][ious < nms_thres]
-
-            if len(det_max) > 0:
-                det_max = torch.cat(det_max).data
-                # Add max detections to outputs
-                output[image_i] = det_max if output[image_i] is None else torch.cat((output[image_i], det_max))
+            max_detections = torch.cat(max_detections).data
+            # Add max detections to outputs
+            output[image_i] = (
+                max_detections if output[image_i] is None else torch.cat((output[image_i], max_detections))
+            )
 
     return output
+
 
 
 def strip_optimizer_from_checkpoint(filename='weights/best.pt'):
