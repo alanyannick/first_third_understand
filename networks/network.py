@@ -91,6 +91,8 @@ class First_Third_Net(nn.Module):
         # print(concatted_features.shape)
         # Note here, the targets dimension should be 1,1,5
         loss = self.classifier(concatted_features, self.targets[0].unsqueeze(0))
+
+
         return loss
 
     # This function is for loading 3rd-party weights, not for weights that you have saved. It will only load weights into the rgb and sfn sub-networks.
