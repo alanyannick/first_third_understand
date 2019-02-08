@@ -21,25 +21,41 @@ def normalize_img(img_all):
     return img_all
 
 
-def sv_augmentation(img, fraction):
+def sv_augmentation(img, scene_img, fraction):
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    scene_img_hsv = cv2.cvtColor(scene_img, cv2.COLOR_BGR2HSV)
+
     S = img_hsv[:, :, 1].astype(np.float32)
     V = img_hsv[:, :, 2].astype(np.float32)
 
-    a = (random.random() * 2 - 1) * fraction + 1
-    S *= a
-    if a > 1:
-        np.clip(S, a_min=0, a_max=255, out=S)
+    S_scene = scene_img_hsv[:, :, 1].astype(np.float32)
+    V_scene = scene_img_hsv[:, :, 2].astype(np.float32)
 
     a = (random.random() * 2 - 1) * fraction + 1
+
+    S *= a
+    S_scene *= a
+    if a > 1:
+        np.clip(S, a_min=0, a_max=255, out=S)
+        np.clip(S_scene, a_min=0, a_max=255, out=S_scene)
+
+    a = (random.random() * 2 - 1) * fraction + 1
+
     V *= a
+    V_scene *= a
     if a > 1:
         np.clip(V, a_min=0, a_max=255, out=V)
+        np.clip(V_scene, a_min=0, a_max=255, out=V_scene)
 
     img_hsv[:, :, 1] = S.astype(np.uint8)
     img_hsv[:, :, 2] = V.astype(np.uint8)
+
+    scene_img_hsv[:, :, 1] = S_scene.astype(np.uint8)
+    scene_img_hsv[:, :, 2] = V_scene.astype(np.uint8)
+
     cv2.cvtColor(img_hsv, cv2.COLOR_HSV2BGR, dst=img)
-    return img
+    cv2.cvtColor(scene_img_hsv, cv2.COLOR_HSV2BGR, dst=scene_img)
+    return img, scene_img
 
 
 class load_images():  # for inference
@@ -208,15 +224,11 @@ class load_images_and_labels():  # for training
             if self.augment and augment_hsv:
                 # SV augmentation by 50%
                 fraction = 0.50
-                img = sv_augmentation(img, fraction)
-                if scene_flag:
-                    scene_img = sv_augmentation(scene_img, fraction)
+                img, scene_img = sv_augmentation(img, scene_img, fraction)
 
             h, w, _ = img.shape
             img, ratio, padw, padh = resize_square(img, height=height, color=(127.5, 127.5, 127.5))
-
-            if scene_flag:
-                scene_img, _, _, _ = resize_square(scene_img, height=height, color=(127.5, 127.5, 127.5))
+            scene_img, _, _, _ = resize_square(scene_img, height=height, color=(127.5, 127.5, 127.5))
 
             # Load labels
             if os.path.isfile(label_path):
@@ -279,10 +291,8 @@ class load_images_and_labels():  # for training
 
             # Augment image and labels
             if self.augment:
-                img, labels, M = random_affine(img, labels, degrees=(-5, 5), translate=(0.10, 0.10), scale=(0.90, 1.10))
-                if scene_flag:
-                    scene_img, _, _ = random_affine(scene_img, labels, degrees=(-5, 5), translate=(0.10, 0.10),
-                                                   scale=(0.90, 1.10))
+                img, scene_img, labels, M = random_affine(img, scene_img, labels, degrees=(-5, 5), translate=(0.10, 0.10), scale=(0.90, 1.10))
+
             # plot flag here @yangming
             # plotFlag = False
             # if plotFlag:
@@ -302,8 +312,7 @@ class load_images_and_labels():  # for training
                 lr_flip = True
                 if lr_flip & (random.random() > 0.5):
                     img = np.fliplr(img)
-                    if scene_flag:
-                        scene_img = np.fliplr(scene_img)
+                    scene_img = np.fliplr(scene_img)
                     if nL > 0:
                         labels[:, 1] = 1 - labels[:, 1]
 
@@ -311,22 +320,19 @@ class load_images_and_labels():  # for training
                 ud_flip = False
                 if ud_flip & (random.random() > 0.5):
                     img = np.flipud(img)
-                    if scene_flag:
-                        scene_img = np.flipud(scene_img)
+                    scene_img = np.flipud(scene_img)
                     if nL > 0:
                         labels[:, 2] = 1 - labels[:, 2]
 
             img_all.append(img)
             labels_all.append(torch.from_numpy(labels))
-            if scene_flag:
-                scene_all.append(scene_img)
+            scene_all.append(scene_img)
 
         # Normalize
         img_all = normalize_img(img_all)
-        if scene_flag:
-            scene_all = normalize_img(scene_all)
-            return torch.from_numpy(img_all), labels_all, torch.from_numpy(scene_all)
-        return torch.from_numpy(img_all), labels_all
+        scene_all = normalize_img(scene_all)
+        return torch.from_numpy(img_all), labels_all, torch.from_numpy(scene_all)
+
 
     def __len__(self):
         return self.nB  # number of batches
@@ -344,7 +350,7 @@ def resize_square(img, height=416, color=(0, 0, 0)):  # resize a rectangular ima
     return cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color), ratio, dw // 2, dh // 2
 
 
-def random_affine(img, targets=None, degrees=(-10, 10), translate=(.1, .1), scale=(.9, 1.1), shear=(-2, 2),
+def random_affine(img, scene_img, targets=None, degrees=(-10, 10), translate=(.1, .1), scale=(.9, 1.1), shear=(-2, 2),
                   borderValue=(127.5, 127.5, 127.5)):
     # torchvision.transforms.RandomAffine(degrees=(-10, 10), translate=(.1, .1), scale=(.9, 1.1), shear=(-10, 10))
     # https://medium.com/uruvideo/dataset-augmentation-with-random-homographies-a8f4b44830d4
@@ -372,7 +378,8 @@ def random_affine(img, targets=None, degrees=(-10, 10), translate=(.1, .1), scal
     M = S @ T @ R  # Combined rotation matrix. ORDER IS IMPORTANT HERE!!
     imw = cv2.warpPerspective(img, M, dsize=(height, height), flags=cv2.INTER_LINEAR,
                               borderValue=borderValue)  # BGR order borderValue
-
+    sceneimgw = cv2.warpPerspective(scene_img, M, dsize=(height, height), flags=cv2.INTER_LINEAR,
+                              borderValue=borderValue)  # BGR order borderValue
     # Return warped points also
     if targets is not None:
         if len(targets) > 0:
@@ -410,7 +417,7 @@ def random_affine(img, targets=None, degrees=(-10, 10), translate=(.1, .1), scal
             targets = targets[i]
             targets[:, 1:5] = xy[i]
 
-        return imw, targets, M
+        return imw, sceneimgw, targets, M
     else:
         return imw
 
