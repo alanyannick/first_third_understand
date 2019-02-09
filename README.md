@@ -86,7 +86,7 @@ Run `test.py` --weights weights_overfit/latest.pt` for verifying our experiments
 - [ ] Train the model with more training tricks.
 
 ### Image Augmentation 
-`(Wait for verifying here.)`
+(Sucessfully verified here.)`
 
 `datasets.py` applies random OpenCV-powered (https://opencv.org/) augmentation to the input images in accordance with the following specifications. Augmentation is applied **only** during training, not during inference. Bounding boxes are automatically tracked and updated with the images. 416 x 416 examples pictured below.
 
