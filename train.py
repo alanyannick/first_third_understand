@@ -8,12 +8,40 @@ from utils.datasets import *
 from utils.utils import *
 from networks.network import First_Third_Net
 from utils.util import *
+
 DARKNET_WEIGHTS_FILENAME = 'darknet53.conv.74'
 DARKNET_WEIGHTS_URL = 'https://pjreddie.com/media/files/{}'.format(DARKNET_WEIGHTS_FILENAME)
 
 import visdom
 import numpy as np
-vis = visdom.Visdom(port=8099)
+
+vis = visdom.Visdom(port=8299)
+
+
+def print_current_predict(targets, model):
+    gt_bbox = np.array(targets[0][0][1:5])
+    print("Gt:")
+    print(gt_bbox)
+    img_size = 416
+    gt_bbox *= img_size
+    gt_bbox[0] = gt_bbox[0] - gt_bbox[2] / 2
+    gt_bbox[1] = gt_bbox[1] - gt_bbox[3] / 2
+    print("Gt:")
+    print(gt_bbox)
+    # get the cls label
+    gt_cls = targets[0][0][0]
+    predict_label = model.classifier.pred_bbox[0]
+    predict_bbox = model.classifier.pred_bbox[1]
+    predict_bbox[0] = predict_bbox[0] - predict_bbox[2] / 2
+    predict_bbox[1] = predict_bbox[1] - predict_bbox[3] / 2
+    stride = 32
+    predict_bbox[0] *= stride
+    predict_bbox[1] *= stride
+    predict_bbox[2] *= stride
+    predict_bbox[3] *= stride
+    print("predict_box:")
+    print(predict_bbox)
+    return gt_bbox, predict_bbox, predict_label
 
 
 def drawing_bbox_gt(input, bbox, name):
@@ -75,7 +103,6 @@ def train(
     # check the model here
     print(model)
 
-
     # Get dataloader
     dataloader = load_images_and_labels(train_path, batch_size=batch_size, img_size=img_size,
                                         multi_scale=multi_scale, augment=True)
@@ -84,10 +111,12 @@ def train(
     if resume:
         checkpoint = torch.load(latest_weights_file, map_location='cpu')
         model.load_state_dict(checkpoint['model'])
+
         # if torch.cuda.device_count() > 1:
-            # raise Exception('Multi-GPU not currently supported: https://github.com/ultralytics/yolov3/issues/21')
-            # print('Using ', torch.cuda.device_count(), ' GPUs')
-            # model = nn.DataParallel(model)
+        # raise Exception('Multi-GPU not currently supported: https://github.com/ultralytics/yolov3/issues/21')
+        # print('Using ', torch.cuda.device_count(), ' GPUs')
+        # model = nn.DataParallel(model)
+
         model.to(device).train()
 
         # # Transfer learning (train only YOLO layers)
@@ -122,8 +151,8 @@ def train(
 
         else:
             print('Init training begin >>>>>>')
-        # if torch.cuda.device_count() > 1:
-        #     raise Exception('Multi-GPU not currently supported: https://github.com/ultralytics/yolov3/issues/21')
+            # if torch.cuda.device_count() > 1:
+            #     raise Exception('Multi-GPU not currently supported: https://github.com/ultralytics/yolov3/issues/21')
             # print('Using ', torch.cuda.device_count(), ' GPUs')
             # model = nn.DataParallel(model)
 
@@ -143,8 +172,10 @@ def train(
                                            'nTargets', 'TP', 'FP', 'FN', 'time'))
 
         # Update scheduler (automatic)
+        # @TODO Trying LR here @yangming
         # scheduler.step()
         # Update scheduler (manual)  at 0, 54, 61 epochs to 1e-3, 1e-4, 1e-5
+
         if epoch > 50:
             lr = lr0 / 10
         else:
@@ -180,8 +211,10 @@ def train(
                     for g in optimizer.param_groups:
                         g['lr'] = lr
                     print('Current_lr:' + str(lr))
+
                 # Import entrance @ yangming wen
                 # Compute loss, compute gradient, update parameters
+
                 if opt.worker == 'detection':
                     loss = model(imgs.to(device), targets)
                 else:
@@ -189,35 +222,10 @@ def train(
                     # visualize
                     vis.image(model.exo_rgb[0, :, :, :], win="exo_rgb", opts=dict(title="scene_" + ' images'))
                     vis.image(model.ego_rgb[0, :, :, :], win="ego_rgb", opts=dict(title="input_" + ' images'))
-
-                    gt_bbox = np.array(targets[0][0][1:5])
-                    print("Gt:")
-                    print(gt_bbox)
-                    gt_bbox *= img_size
-                    gt_bbox[0] = gt_bbox[0] - gt_bbox[2] / 2
-                    gt_bbox[1] = gt_bbox[1] - gt_bbox[3] / 2
-                    print("Gt:")
-                    print(gt_bbox)
-                    # get the cls label
-                    gt_cls = targets[0][0][0]
-                    predict_label = model.classifier.pred_bbox[0]
-                    predict_bbox =  model.classifier.pred_bbox[1]
-                    predict_bbox[0] = predict_bbox[0] - predict_bbox[2] / 2
-                    predict_bbox[1] = predict_bbox[1] - predict_bbox[3] / 2
-                    stride = 32
-                    predict_bbox[0] *= stride
-                    predict_bbox[1] *= stride
-                    predict_bbox[2] *= stride
-                    predict_bbox[3] *= stride
-                    print("predict_box:")
-                    print(predict_bbox)
-
+                    gt_bbox, predict_bbox, predict_label = print_current_predict(targets, model)
                     # xyxy = (xywh2xyxy(bbox.unsqueeze(0)) * img_size).squeeze(0).tolist()
                     drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, name='gt_')
                     drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, name='predict_')
-
-
-
                 loss.backward()
 
                 # accumulate gradient for x batches before optimizing
@@ -261,7 +269,8 @@ def train(
                     s = ('%8s%12s' + '%10.3g' * 14) % (
                         '%g/%g' % (epoch, epochs - 1), '%g/%g' % (i, len(dataloader) - 1), rloss['x'],
                         rloss['y'], rloss['w'], rloss['h'], rloss['conf'], rloss['cls'],
-                        rloss['loss'], mean_precision, mean_recall, model.classifier.losses['nT'], model.classifier.losses['TP'],
+                        rloss['loss'], mean_precision, mean_recall, model.classifier.losses['nT'],
+                        model.classifier.losses['TP'],
                         model.classifier.losses['FP'], model.classifier.losses['FN'], time.time() - t0)
                     t0 = time.time()
                     print(s)
@@ -297,20 +306,20 @@ def train(
                     backup_file_path,
                 ))
 
-            # Calculate mAP
-            # mAP, R, P = test.test(
-            #     net_config_path,
-            #     data_config_path,
-            #     latest_weights_file,
-            #     batch_size=batch_size,
-            #     img_size=img_size,
-            #     gpu_choice=gpu_id,
-            #     worker='first'
-            # )
+                # Calculate mAP
+                # mAP, R, P = test.test(
+                #     net_config_path,
+                #     data_config_path,
+                #     latest_weights_file,
+                #     batch_size=batch_size,
+                #     img_size=img_size,
+                #     gpu_choice=gpu_id,
+                #     worker='first'
+                # )
 
-            # Write epoch results
-            # with open('results.txt', 'a') as file:
-            #     file.write(s + '%11.3g' * 3 % (mAP, P, R) + '\n')
+                # Write epoch results
+                # with open('results.txt', 'a') as file:
+                #     file.write(s + '%11.3g' * 3 % (mAP, P, R) + '\n')
 
 
 if __name__ == '__main__':
@@ -323,7 +332,8 @@ if __name__ == '__main__':
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='cfg file path')
     parser.add_argument('--multi-scale', action='store_true', help='random image sizes per batch 320 - 608')
     parser.add_argument('--img_size_extra', type=int, default=32 * 13, help='pixels')
-    parser.add_argument('--weights-path', type=str, default='weight_overfit_one_frame_2_1', help='path to store weights')
+    parser.add_argument('--weights-path', type=str, default='weight_overfit_one_frame_2_1',
+                        help='path to store weights')
     parser.add_argument('--resume', action='store_true', help='resume training flag')
     parser.add_argument('--report', action='store_true', help='report TP, FP, FN, P and R per batch (slower)')
     parser.add_argument('--freeze', action='store_true', help='freeze darknet53.conv.74 layers for first epoch')
