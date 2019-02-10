@@ -1,6 +1,6 @@
 import argparse
 import time
-
+import pylab as pl
 # Import test.py to get mAP after each epoch
 import test
 
@@ -154,6 +154,7 @@ def train(
 
             drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
             drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, label=predict_label, name='predict_', vis=vis)
+            drawing_heat_map(input=model.exo_rgb, prediction_all=model.classifier.prediction_all, name='heat_map_', vis=vis)
             loss.backward()
 
             # @TODO: Muilti-batch here
