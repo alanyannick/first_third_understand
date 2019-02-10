@@ -18,7 +18,7 @@ DARKNET_WEIGHTS_URL = 'https://pjreddie.com/media/files/{}'.format(DARKNET_WEIGH
 
 # Visualize Way
 import visdom
-vis = visdom.Visdom(port=8099)
+vis = visdom.Visdom(port=8299)
 
 def train(
         net_config_path,
@@ -101,6 +101,9 @@ def train(
     model_info(model)
     t0 = time.time()
     mean_recall, mean_precision = 0, 0
+    from utils.utils import VisuaLoss
+    visLoss = VisuaLoss(vis)
+
     for epoch in range(epochs):
         epoch += start_epoch
         print(('%8s%12s' + '%10s' * 14) % ('Epoch', 'Batch', 'x', 'y', 'w', 'h', 'conf', 'cls', 'total', 'P', 'R',
@@ -192,6 +195,7 @@ def train(
                 model.classifier.losses['TP'],
                 model.classifier.losses['FP'], model.classifier.losses['FN'], time.time() - t0)
             t0 = time.time()
+            visLoss.plot_current_errors(epoch, 1, rloss)
             print(s)
 
             # Update best loss

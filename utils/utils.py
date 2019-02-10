@@ -613,3 +613,26 @@ def drawing_heat_map(input, prediction_all, vis, name, tmp_it=0):
     heat_map = normalize_img(torch.from_numpy(final_out).unsqueeze(0))
     vis.image(heat_map[0, :, :, :], win=name, opts=dict(title=name + ' images'))
     return heatmap
+
+class VisuaLoss():
+    def __init__(self, visdom):
+        print('Init visuall loss line')
+        self.name = 'first_third_person'
+        self.display_id = 99
+        self.vis = visdom
+
+    def plot_current_errors(self, epoch, counter_ratio, errors):
+        if not hasattr(self, 'plot_data'):
+            self.plot_data = {'X': [], 'Y': [], 'legend': list(errors.keys())}
+        self.plot_data['X'].append(epoch + counter_ratio)
+        self.plot_data['Y'].append([errors[k] for k in self.plot_data['legend']])
+        self.vis.line(
+            X=np.stack([np.array(self.plot_data['X'])] * len(self.plot_data['legend']), 1),
+            Y=np.array(self.plot_data['Y']),
+            opts={
+                'title': self.name + ' loss over time',
+                'legend': self.plot_data['legend'],
+                'xlabel': 'epoch',
+                'ylabel': 'loss'},
+            win=self.display_id)
+
