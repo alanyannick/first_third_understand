@@ -5,7 +5,7 @@ import numpy as np
 import joblib
 import torch
 import torch.nn.functional as F
-
+import pylab as pl
 from utils import torch_utils
 
 # Set printoptions
@@ -563,3 +563,53 @@ def draw_limbs(image, part_line, l_pair, line_color, thickness=1):
             end_xy = part_line[end_p]
             cv2.line(image, start_xy, end_xy, line_color[i], thickness)
     return image
+
+
+def drawing_heat_map(input, prediction_all, vis, name, tmp_it=0):
+    # curr_score_map = prediction_all[1][tmp_it].detach().cpu().numpy()
+    # curr_cord_map = prediction_all[1][tmp_it].detach().cpu().numpy()
+    box_pred = prediction_all[2][tmp_it].detach().cpu().numpy()
+    box_corner = np.zeros(box_pred.shape)
+    box_corner[:, :, :, 0] = box_pred[:, :, :, 0] - box_pred[:, :, :, 2] / 2
+    box_corner[:, :, :, 1] = box_pred[:, :, :, 1] - box_pred[:, :, :, 3] / 2
+    box_corner[:, :, :, 2] = box_pred[:, :, :, 0] + box_pred[:, :, :, 2] / 2
+    box_corner[:, :, :, 3] = box_pred[:, :, :, 1] + box_pred[:, :, :, 3] / 2
+    box_corner[box_corner < 0] = 0
+    box_corner[box_corner > 13] = 13
+    box_corner = box_corner.astype(int)
+    my_sum = np.zeros((13, 13))
+    my_max = np.zeros((13, 13))
+    my_count = np.zeros((13, 13))
+    for an_cnt in range(3):
+        for x_cord in range(13):
+            for y_cord in range(13):
+                cur_box = box_corner[an_cnt, x_cord, y_cord, :]
+
+                #        print(cur_box)
+                my_sum[cur_box[1]:cur_box[3], cur_box[0]:cur_box[2]] = my_sum[cur_box[1]:cur_box[3],
+                                                                       cur_box[0]:cur_box[2]] + \
+                                                                       prediction_all[1][tmp_it][an_cnt][x_cord][
+                                                                           y_cord].detach().cpu().numpy()
+                my_max[cur_box[1]:cur_box[3], cur_box[0]:cur_box[2]] = np.maximum(
+                    my_max[cur_box[1]:cur_box[3], cur_box[0]:cur_box[2]],
+                    prediction_all[1][tmp_it][an_cnt][x_cord][y_cord].detach().cpu().numpy())
+                my_count[cur_box[1]:cur_box[3], cur_box[0]:cur_box[2]] = my_count[cur_box[1]:cur_box[3],
+                                                                         cur_box[0]:cur_box[2]] + 1
+    my_heatmap = np.divide(my_sum, my_count)
+
+    # height, width, _ = img.shape
+    width = 416
+    height = 416
+    corresponding_map = cv2.resize(my_heatmap, (width, height))
+    # normarlize the cmap
+    corresponding_map -= corresponding_map.min()
+    corresponding_map /= corresponding_map.max()
+    # get the heatmap
+    heatmap = cv2.applyColorMap(np.uint8(corresponding_map * 256)
+                                , cv2.COLORMAP_JET)
+    # transfer img dim
+    scene_img_np = tensor2im(input)
+    final_out = np.uint8(heatmap * 0.3 + scene_img_np * 0.5)
+    heat_map = normalize_img(torch.from_numpy(final_out).unsqueeze(0))
+    vis.image(heat_map[0, :, :, :], win=name, opts=dict(title=name + ' images'))
+    return heatmap
