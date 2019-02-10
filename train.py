@@ -150,9 +150,10 @@ def train(
             # visualize
             vis.image(model.exo_rgb[0, :, :, :], win="exo_rgb", opts=dict(title="scene_" + ' images'))
             vis.image(model.ego_rgb[0, :, :, :], win="ego_rgb", opts=dict(title="input_" + ' images'))
-            gt_bbox, predict_bbox, predict_label = print_current_predict(targets, model)
-            drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, name='gt_', vis=vis)
-            drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, name='predict_', vis=vis)
+            gt_bbox, gt_label, predict_bbox, predict_label = print_current_predict(targets, model)
+
+            drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
+            drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, label=predict_label, name='predict_', vis=vis)
             loss.backward()
 
             # @TODO: Muilti-batch here
