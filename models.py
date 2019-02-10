@@ -201,7 +201,6 @@ class YOLOLayer(nn.Module):
             # Mask outputs to ignore non-existing objects
             my_tmp = targets.clone().unsqueeze(0).cuda()
             my_tmp[:, 0, 1:5] = my_tmp[:, 0, 1:5] * nG
-        if True:
 
             loss_x = self.mse_loss(x[mask], tx[mask])
             loss_y = self.mse_loss(y[mask], ty[mask])
@@ -226,6 +225,10 @@ class YOLOLayer(nn.Module):
             loss_cls = (1 / nB) * self.ce_loss(pred_cls[mask], torch.argmax(tcls[mask], 1))
             loss = loss_x + loss_y + loss_w + loss_h + loss_conf + loss_cls
 
+            # For heat map visualization
+            output = torch.cat(
+                 (my_tmp.view(nB, 5), pred_boxes[mask], pred_conf[conf_mask_true].view(nB, 1), pred_cls[mask]), 1)
+
             return (
                 loss,
                 loss_x.item(),
@@ -237,22 +240,13 @@ class YOLOLayer(nn.Module):
                 recall,
                 precision,
                 self.bbox_predict,
+                [output, pred_conf, pred_boxes]
             )
-
         else:
-
             # If not in training phase return predictions
             output = torch.cat(
-                (my_tmp.view(nB, 5), pred_boxes[mask], pred_conf[conf_mask_true].view(nB, 1), pred_cls[mask]), 1)
-            # print(output)
-            #   output = torch.cat(
-            #      (
-            #         pred_boxes.view(nB, -1, 4) * stride,
-            #        pred_conf.view(nB, -1, 1),
-            #       pred_cls.view(nB, -1, self.num_classes),
-            #  ),
-            #   -1,
-            # )
+                (self.bbox_predict,
+                 pred_conf), 1)
             return output
 
 
@@ -267,6 +261,7 @@ class Darknet(nn.Module):
         self.header_info = np.array([0, 0, 0, self.seen, 0])
         self.loss_names = ["x", "y", "w", "h", "conf", "cls", "recall", "precision"]
         self.pred_bbox = []
+        self.prediction_all = []
 
     def forward(self, x, targets=None):
         is_training = targets is not None
@@ -288,7 +283,7 @@ class Darknet(nn.Module):
                 # Train phase: get loss
                 if is_training:
                     # x, *losses = module[0](x, targets)
-                    x, *losses, self.pred_bbox = module[0](x, targets) # every yolo layer (unless it's the end of the network) is followed by a "route" layer, so the "x" here doesn't get used as an input to any layer
+                    x, *losses, self.pred_bbox, self.prediction_all = module[0](x, targets) # every yolo layer (unless it's the end of the network) is followed by a "route" layer, so the "x" here doesn't get used as an input to any layer
                     for name, loss in zip(self.loss_names, losses):
                         self.losses[name] += loss
                 # Test phase: Get detections

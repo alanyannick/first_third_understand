@@ -2,9 +2,10 @@ import random
 import math
 import cv2
 import numpy as np
+import joblib
 import torch
 import torch.nn.functional as F
-
+import pylab as pl
 from utils import torch_utils
 
 # Set printoptions
@@ -47,35 +48,6 @@ def class_weights():  # frequency of each class in coco train2014
          1877, 17630, 4337, 4624, 1075, 3468, 135, 1380])
     weights /= weights.sum()
     return weights
-
-
-def draw_bounding_box(image, bbox, thickness=1):
-    WHITE = (255, 255, 255)
-    bx, by, bw, bh = tuple(bbox)
-    bx = int(bx)
-    by = int(by)
-    bw = int(bw)
-    bh = int(bh)
-    cv2.line(image, (bx, by), (bx + bw, by), WHITE, thickness)
-    cv2.line(image, (bx, by), (bx, by + bh), WHITE, thickness)
-    cv2.line(image, (bx, by + bh), (bx + bw, by + bh), WHITE, thickness)
-    cv2.line(image, (bx + bw, by), (bx + bw, by + bh), WHITE, thickness)
-    cv2.imwrite('/home/yangmingwen/first_third_person/result.jpg', image)
-    return image
-
-
-def plot_one_box(x, img, color=None, label=None, line_thickness=None):  # Plots one bounding box on image img
-    tl = line_thickness or round(0.002 * max(img.shape[0:2])) + 1  # line thickness
-    color = color or [random.randint(0, 255) for _ in range(3)]
-    c1, c2 = (int(x[0]), int(x[1])), (int(x[2]), int(x[3]))
-    cv2.rectangle(img, c1, c2, color, thickness=tl)
-    cv2.imwrite('/home/yangmingwen/first_third_person/result.jpg', img)
-    if label:
-        tf = max(tl - 1, 1)  # font thickness
-        t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
-        c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
-        cv2.rectangle(img, c1, c2, color, -1)  # filled
-        cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
 
 
 def weights_init_normal(m):
@@ -217,7 +189,7 @@ def bbox_iou(box1, box2, x1y1x2y2=True):
 
 
 def build_targets(
-    pred_boxes, pred_conf, pred_cls, target, anchors, num_anchors, num_classes, grid_size, ignore_thres, img_dim
+        pred_boxes, pred_conf, pred_cls, target, anchors, num_anchors, num_classes, grid_size, ignore_thres, img_dim
 ):
     nB = target.size(0)
     nA = num_anchors
@@ -239,11 +211,11 @@ def build_targets(
             if target[b, t].sum() == 0:
                 continue
             nGT += 1
-            #print('max')
-            #print(torch.argmax(pred_conf,0))
-            #max_ind= torch.argmax(pred_conf[b])
-            #mask[b].view(-1)[max_ind]=1
-            #conf_mask[b].view(-1)[max_ind]=1
+            # print('max')
+            # print(torch.argmax(pred_conf,0))
+            # max_ind= torch.argmax(pred_conf[b])
+            # mask[b].view(-1)[max_ind]=1
+            # conf_mask[b].view(-1)[max_ind]=1
             # Convert to position relative to box
             gx = target[b, t, 1] * nG
             gy = target[b, t, 2] * nG
@@ -264,10 +236,10 @@ def build_targets(
             best_n = np.argmax(anch_ious)
             # Get ground truth box
             gt_box = torch.FloatTensor(np.array([gx, gy, gw, gh])).unsqueeze(0)
-            #print(gt_box)
+            # print(gt_box)
             # Get the best prediction
             pred_box = pred_boxes[b, best_n, gj, gi].unsqueeze(0)
-            #print(pred_box)
+            # print(pred_box)
             # Masks
             mask[b, best_n, gj, gi] = 1
             conf_mask[b, best_n, gj, gi] = 1
@@ -317,7 +289,7 @@ def non_max_suppression(prediction, num_classes, conf_thres=0.5, nms_thres=0.4):
         if not image_pred.size(0):
             continue
         # Get score and class with highest confidence
-        class_conf, class_pred = torch.max(image_pred[:, 5 : 5 + num_classes], 1, keepdim=True)
+        class_conf, class_pred = torch.max(image_pred[:, 5: 5 + num_classes], 1, keepdim=True)
         # Detections ordered as (x1, y1, x2, y2, obj_conf, class_conf, class_pred)
         detections = torch.cat((image_pred[:, :5], class_conf.float(), class_pred.float()), 1)
         # Iterate through all predicted classes
@@ -352,7 +324,6 @@ def non_max_suppression(prediction, num_classes, conf_thres=0.5, nms_thres=0.4):
     return output
 
 
-
 def strip_optimizer_from_checkpoint(filename='weights/best.pt'):
     # Strip optimizer from *.pt files for lighter files (reduced by 2/3 size)
     import torch
@@ -374,6 +345,28 @@ def coco_class_count(path='../coco/labels/train2014/'):
         print(i, len(files))
 
 
+# -------------- Visualize Part ----------------
+
+
+# Converts a Tensor into a Numpy array
+# |imtype|: the desired type of the converted numpy array
+def tensor2im(image_tensor, imtype=np.uint8, channel=0):
+    image_numpy = image_tensor[channel].cpu().float().numpy()
+    if image_numpy.shape[0] == 1:
+        image_numpy = np.tile(image_numpy, (3, 1, 1))
+    image_numpy = cv2.cvtColor(np.transpose(image_numpy, (1, 2, 0)) * 255.0, cv2.COLOR_RGB2BGR)
+    return image_numpy.astype(imtype)
+
+
+def normalize_img(img_all):
+    img_all = np.stack(img_all)[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB and cv2 to pytorch
+    img_all = np.ascontiguousarray(img_all, dtype=np.float32)
+    # img_all -= self.rgb_mean
+    # img_all /= self.rgb_std
+    img_all /= 255.0
+    return img_all
+
+
 def plot_results():
     # Plot YOLO training results file 'results.txt'
     import glob
@@ -393,3 +386,253 @@ def plot_results():
             plt.title(s[i])
             if i == 0:
                 plt.legend()
+
+
+def draw_bounding_box(image, bbox, thickness=1):
+    WHITE = (255, 255, 255)
+    bx, by, bw, bh = tuple(bbox)
+    bx = int(bx)
+    by = int(by)
+    bw = int(bw)
+    bh = int(bh)
+    cv2.line(image, (bx, by), (bx + bw, by), WHITE, thickness)
+    cv2.line(image, (bx, by), (bx, by + bh), WHITE, thickness)
+    cv2.line(image, (bx, by + bh), (bx + bw, by + bh), WHITE, thickness)
+    cv2.line(image, (bx + bw, by), (bx + bw, by + bh), WHITE, thickness)
+    # cv2.imwrite('/home/yangmingwen/first_third_person/result.jpg', image)
+    return image
+
+
+def plot_one_box(x, img, color=None, label=None,
+                 line_thickness=None):  # Plots one bounding box on image img
+    tl = line_thickness or round(0.002 * max(img.shape[0:2])) + 1  # line thickness
+    color = color or [random.randint(0, 255) for _ in range(3)]
+    c1, c2 = (int(x[0]), int(x[1])), (int(x[2]), int(x[3]))
+    cv2.rectangle(img, c1, c2, color, thickness=tl)
+    cv2.imwrite('/home/yangmingwen/first_third_person/result.jpg', img)
+    if label:
+        tf = max(tl - 1, 1)  # font thickness
+        t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
+        c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
+        cv2.rectangle(img, c1, c2, color, -1)  # filled
+        cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf,
+                    lineType=cv2.LINE_AA)
+
+
+def print_current_predict(targets, model):
+    gt_bbox = np.array(targets[0][0][1:5])
+    print("Gt:")
+    print(gt_bbox)
+    img_size = 416
+    gt_bbox *= img_size
+    gt_bbox[0] = gt_bbox[0] - gt_bbox[2] / 2
+    gt_bbox[1] = gt_bbox[1] - gt_bbox[3] / 2
+    print("Gt:")
+    print(gt_bbox)
+    # get the cls label
+    gt_label = np.array(targets[0][0][0])
+    predict_label = model.classifier.pred_bbox[0]
+    predict_bbox = model.classifier.pred_bbox[1]
+    predict_bbox[0] = predict_bbox[0] - predict_bbox[2] / 2
+    predict_bbox[1] = predict_bbox[1] - predict_bbox[3] / 2
+    stride = 32
+    predict_bbox[0] *= stride
+    predict_bbox[1] *= stride
+    predict_bbox[2] *= stride
+    predict_bbox[3] *= stride
+    print("predict_box:")
+    print(predict_bbox)
+    return gt_bbox, gt_label, predict_bbox, predict_label
+
+
+def drawing_bbox_gt(input, bbox, label, name, vis):
+    """
+    input tensor(1,1,1,1), np.bbox(1,1,1,1)
+    """
+    # transfer from rgb 2 bgr, tensor 2 numpy
+    scene_img_np = tensor2im(input)
+    # Draw the box
+    bbox_img = draw_bounding_box(scene_img_np, bbox)
+    # Draw the bbox with keypoints
+    bbox_img_with_keypoint = visual_keypoint(image=bbox_img, bbox=bbox, cluster_number=label)
+    # transfer from bgr 2 rgb, numpy 2 tensor
+    bbox_img = torch.from_numpy(bbox_img_with_keypoint).unsqueeze(0)
+    # normalize image
+    bbox_img = normalize_img(bbox_img)
+    vis.image(bbox_img[0, :, :, :], win=name, opts=dict(title=name + ' images'))
+
+
+def load_cluster_center_data(cluster_file):
+    return joblib.load(cluster_file)
+
+
+def visual_keypoint(image, bbox, cluster_number, cluster_file='./data/clusters'):
+    # keypoints info
+    RED = (0, 0, 255)
+    GREEN = (0, 255, 0)
+    BLUE = (255, 0, 0)
+    CYAN = (255, 255, 0)
+    YELLOW = (0, 255, 255)
+    ORANGE = (0, 255 / 2, 255)
+    PURPLE = (255, 0, 255)
+    WHITE = (255, 255, 255)
+
+    KEYPOINT_LABELS = [x.lower() for x in [
+        "Head",  # 0
+        "L-Shoulder",  # 1
+        "R-Shoulder",  # 2
+        "L-Elbow",  # 3
+        "R-Elbow",  # 4
+        "L-Wrist",  # 5
+        "R-Wrist",  # 6
+        "L-Hip",  # 7
+        "R-Hip",  # 8
+        "L-Knee",  # 9
+        "R-knee",  # 10
+        "L-Ankle",  # 11
+        "R-Ankle",  # 12
+        "TORSO"  # 13
+        "ABDOM"  # 14
+    ]]
+
+    l_pair = [
+        (0, 13),  # (0, 17),  # Head
+        (1, 2), (1, 3), (3, 5), (2, 4), (4, 6),
+        (13, 14),
+        (7, 8), (7, 9), (9, 11), (8, 10), (10, 12)
+    ]
+
+    line_color = [GREEN,
+                  RED, RED, RED, RED, RED,
+                  RED,
+                  YELLOW, YELLOW, YELLOW, YELLOW, YELLOW]
+
+    p_color = [GREEN,  # Head
+               RED, RED, RED, RED, RED, RED,  # LShoulder, RShoulder, LElbow, RElbow, LWrist, RWrist
+               YELLOW, YELLOW, YELLOW, YELLOW, YELLOW, YELLOW,  # LHip, RHip, LKnee, Rknee, LAnkle, RAnkle,
+               WHITE, WHITE]  # TORSO, ABDOM
+
+    keypoints = access_keypoints(cluster_file, int(cluster_number))
+    part_line = draw_keypoints(p_color, image, bbox, keypoints)
+    keypoint_drawing_out = draw_limbs(image, part_line, l_pair, line_color)
+    return keypoint_drawing_out
+
+
+def access_keypoints(cluster_file, cluster_number):
+    '''return keypoint data based on cluster_number, keypoints are relative to the center and size of the bbox'''
+    results = []
+    cluster_center_data = load_cluster_center_data(cluster_file)
+    keypoints = cluster_center_data.cluster_centers_[cluster_number]
+    # rescale to [-1, 1]
+    keypoints /= np.max(np.abs(keypoints))
+    # turn into pairs
+    it = iter(keypoints)
+    for x in it:
+        results.append((x, next(it)))
+    # create torso keypoint
+    lshoulder = results[1]
+    rshoulder = results[2]
+    results.append(((lshoulder[0] + rshoulder[0]) / 2, (lshoulder[1] + rshoulder[1]) / 2))
+    # create abdominal keypoint
+    lhip = results[7]
+    rhip = results[8]
+    results.append(((lhip[0] + rhip[0]) / 2, (lhip[1] + rhip[1]) / 2))
+
+    return results
+
+
+def draw_keypoints(p_color, image, bbox, keypoints, thickness=2):
+    bx, by, bw, bh = tuple(bbox)
+    part_line = {}
+
+    cx = bx + bw // 2
+    cy = by + bh // 2
+
+    for n in range(len(keypoints)):
+        cor_x, cor_y = keypoints[n]
+        part_line[n] = (int(cx + cor_x * (bw / 2)), int(cy + cor_y * (bh / 2)))
+        # cv2.circle(image, (part_line[n][0], part_line[n][1]), 2, p_color[n], thickness)
+    return part_line
+
+
+def draw_limbs(image, part_line, l_pair, line_color, thickness=1):
+    '''using the keypoints info on top'''
+    for i, (start_p, end_p) in enumerate(l_pair):
+        if start_p in part_line and end_p in part_line:
+            start_xy = part_line[start_p]
+            end_xy = part_line[end_p]
+            cv2.line(image, start_xy, end_xy, line_color[i], thickness)
+    return image
+
+
+def drawing_heat_map(input, prediction_all, vis, name, tmp_it=0):
+    # curr_score_map = prediction_all[1][tmp_it].detach().cpu().numpy()
+    # curr_cord_map = prediction_all[1][tmp_it].detach().cpu().numpy()
+    box_pred = prediction_all[2][tmp_it].detach().cpu().numpy()
+    box_corner = np.zeros(box_pred.shape)
+    box_corner[:, :, :, 0] = box_pred[:, :, :, 0] - box_pred[:, :, :, 2] / 2
+    box_corner[:, :, :, 1] = box_pred[:, :, :, 1] - box_pred[:, :, :, 3] / 2
+    box_corner[:, :, :, 2] = box_pred[:, :, :, 0] + box_pred[:, :, :, 2] / 2
+    box_corner[:, :, :, 3] = box_pred[:, :, :, 1] + box_pred[:, :, :, 3] / 2
+    box_corner[box_corner < 0] = 0
+    box_corner[box_corner > 13] = 13
+    box_corner = box_corner.astype(int)
+    my_sum = np.zeros((13, 13))
+    my_max = np.zeros((13, 13))
+    my_count = np.zeros((13, 13))
+    for an_cnt in range(3):
+        for x_cord in range(13):
+            for y_cord in range(13):
+                cur_box = box_corner[an_cnt, x_cord, y_cord, :]
+
+                #        print(cur_box)
+                my_sum[cur_box[1]:cur_box[3], cur_box[0]:cur_box[2]] = my_sum[cur_box[1]:cur_box[3],
+                                                                       cur_box[0]:cur_box[2]] + \
+                                                                       prediction_all[1][tmp_it][an_cnt][x_cord][
+                                                                           y_cord].detach().cpu().numpy()
+                my_max[cur_box[1]:cur_box[3], cur_box[0]:cur_box[2]] = np.maximum(
+                    my_max[cur_box[1]:cur_box[3], cur_box[0]:cur_box[2]],
+                    prediction_all[1][tmp_it][an_cnt][x_cord][y_cord].detach().cpu().numpy())
+                my_count[cur_box[1]:cur_box[3], cur_box[0]:cur_box[2]] = my_count[cur_box[1]:cur_box[3],
+                                                                         cur_box[0]:cur_box[2]] + 1
+    my_heatmap = np.divide(my_sum, my_count)
+
+    # height, width, _ = img.shape
+    width = 416
+    height = 416
+    corresponding_map = cv2.resize(my_heatmap, (width, height))
+    # normarlize the cmap
+    corresponding_map -= corresponding_map.min()
+    corresponding_map /= corresponding_map.max()
+    # get the heatmap
+    heatmap = cv2.applyColorMap(np.uint8(corresponding_map * 256)
+                                , cv2.COLORMAP_JET)
+    # transfer img dim
+    scene_img_np = tensor2im(input)
+    final_out = np.uint8(heatmap * 0.3 + scene_img_np * 0.5)
+    heat_map = normalize_img(torch.from_numpy(final_out).unsqueeze(0))
+    vis.image(heat_map[0, :, :, :], win=name, opts=dict(title=name + ' images'))
+    return heatmap
+
+class VisuaLoss():
+    def __init__(self, visdom):
+        print('Init visuall loss line')
+        self.name = 'first_third_person'
+        self.display_id = 99
+        self.vis = visdom
+
+    def plot_current_errors(self, epoch, counter_ratio, errors):
+        if not hasattr(self, 'plot_data'):
+            self.plot_data = {'X': [], 'Y': [], 'legend': list(errors.keys())}
+        self.plot_data['X'].append(epoch + counter_ratio)
+        self.plot_data['Y'].append([errors[k] for k in self.plot_data['legend']])
+        self.vis.line(
+            X=np.stack([np.array(self.plot_data['X'])] * len(self.plot_data['legend']), 1),
+            Y=np.array(self.plot_data['Y']),
+            opts={
+                'title': self.name + ' loss over time',
+                'legend': self.plot_data['legend'],
+                'xlabel': 'epoch',
+                'ylabel': 'loss'},
+            win=self.display_id)
+

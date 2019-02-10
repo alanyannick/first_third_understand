@@ -1,63 +1,24 @@
 import argparse
 import time
-
+import pylab as pl
 # Import test.py to get mAP after each epoch
 import test
-from models import *
+
+# Utils Usage
 from utils.datasets import *
 from utils.utils import *
-from networks.network import First_Third_Net
 from utils.util import *
+
+# Model Definition
+from models import *
+from networks.network import First_Third_Net
 
 DARKNET_WEIGHTS_FILENAME = 'darknet53.conv.74'
 DARKNET_WEIGHTS_URL = 'https://pjreddie.com/media/files/{}'.format(DARKNET_WEIGHTS_FILENAME)
 
+# Visualize Way
 import visdom
-import numpy as np
-
 vis = visdom.Visdom(port=8299)
-
-
-def print_current_predict(targets, model):
-    gt_bbox = np.array(targets[0][0][1:5])
-    print("Gt:")
-    print(gt_bbox)
-    img_size = 416
-    gt_bbox *= img_size
-    gt_bbox[0] = gt_bbox[0] - gt_bbox[2] / 2
-    gt_bbox[1] = gt_bbox[1] - gt_bbox[3] / 2
-    print("Gt:")
-    print(gt_bbox)
-    # get the cls label
-    gt_cls = targets[0][0][0]
-    predict_label = model.classifier.pred_bbox[0]
-    predict_bbox = model.classifier.pred_bbox[1]
-    predict_bbox[0] = predict_bbox[0] - predict_bbox[2] / 2
-    predict_bbox[1] = predict_bbox[1] - predict_bbox[3] / 2
-    stride = 32
-    predict_bbox[0] *= stride
-    predict_bbox[1] *= stride
-    predict_bbox[2] *= stride
-    predict_bbox[3] *= stride
-    print("predict_box:")
-    print(predict_bbox)
-    return gt_bbox, predict_bbox, predict_label
-
-
-def drawing_bbox_gt(input, bbox, name):
-    """
-    input tensor(1,1,1,1), np.bbox(1,1,1,1)
-    """
-    # transfer from rgb 2 bgr, tensor 2 numpy
-    scene_img_np = tensor2im(input)
-    # Draw the box
-    bbox_img = draw_bounding_box(scene_img_np, bbox)
-    # transfer from bgr 2 rgb, numpy 2 tensor
-    bbox_img = torch.from_numpy(bbox_img).unsqueeze(0)
-    # normalize image
-    bbox_img = normalize_img(bbox_img)
-    vis.image(bbox_img[0, :, :, :], win=name, opts=dict(title=name + ' images'))
-
 
 def train(
         net_config_path,
@@ -94,13 +55,8 @@ def train(
     train_path = data_config['train']
 
     # Initialize model
-    if opt.worker == 'detection':
-        model = Darknet(net_config_path, img_size)
-    else:
-        # here, for the rgb is 416 = 32 by 13 but for the classifier is 13 by 13
-        model = First_Third_Net(net_config_path)
-    # model.load_pretrained_weights()
-    # check the model here
+    # here, for the rgb is 416 = 32 by 13 but for the classifier is 13 by 13
+    model = First_Third_Net(net_config_path)
     print(model)
 
     # Get dataloader
@@ -111,33 +67,18 @@ def train(
     if resume:
         checkpoint = torch.load(latest_weights_file, map_location='cpu')
         model.load_state_dict(checkpoint['model'])
-
-        # if torch.cuda.device_count() > 1:
-        # raise Exception('Multi-GPU not currently supported: https://github.com/ultralytics/yolov3/issues/21')
-        # print('Using ', torch.cuda.device_count(), ' GPUs')
-        # model = nn.DataParallel(model)
-
         model.to(device).train()
-
-        # # Transfer learning (train only YOLO layers)
-        # for i, (name, p) in enumerate(model.named_parameters()):
-        #     if p.shape[0] != 650:  # not YOLO layer
-        #         p.requires_grad = False
-
         # Set optimizer
         optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=lr0, momentum=.9)
-
         start_epoch = checkpoint['epoch'] + 1
         if checkpoint['optimizer'] is not None:
             optimizer.load_state_dict(checkpoint['optimizer'])
             best_loss = checkpoint['best_loss']
         del checkpoint  # current, saved
-
     else:
         start_epoch = 0
         best_loss = float('inf')
-
-        # Initialize model with darknet53 weights (optional)
+        # TODO: Initialize model with darknet53 weights (optional)
         load_darnet = False
         if load_darnet == True:
             def_weight_file = os.path.join(weights_path, DARKNET_WEIGHTS_FILENAME)
@@ -148,14 +89,8 @@ def train(
             assert os.path.isfile(def_weight_file)
             model.load_weights(def_weight_file)
             print('Init model with Darknet53 training begin >>>>>>')
-
         else:
             print('Init training begin >>>>>>')
-            # if torch.cuda.device_count() > 1:
-            #     raise Exception('Multi-GPU not currently supported: https://github.com/ultralytics/yolov3/issues/21')
-            # print('Using ', torch.cuda.device_count(), ' GPUs')
-            # model = nn.DataParallel(model)
-
         model.to(device).train()
         # Set optimizer
         optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=lr0, momentum=.9)
@@ -166,6 +101,9 @@ def train(
     model_info(model)
     t0 = time.time()
     mean_recall, mean_precision = 0, 0
+    from utils.utils import VisuaLoss
+    visLoss = VisuaLoss(vis)
+
     for epoch in range(epochs):
         epoch += start_epoch
         print(('%8s%12s' + '%10s' * 14) % ('Epoch', 'Batch', 'x', 'y', 'w', 'h', 'conf', 'cls', 'total', 'P', 'R',
@@ -199,87 +137,71 @@ def train(
         metrics = torch.zeros(3, num_classes)
         optimizer.zero_grad()
 
-        scene_flag = True
-        if scene_flag:
-            for i, (imgs, targets, scenes) in enumerate(dataloader):
-                if sum([len(x) for x in targets]) < 1:  # if no targets continue
-                    continue
+        for i, (imgs, targets, scenes) in enumerate(dataloader):
+            if sum([len(x) for x in targets]) < 1:  # if no targets continue
+                continue
 
-                # SGD burn-in
-                if (epoch == 0) & (i <= 1000):
-                    lr = lr0 * (i / 1000) ** 4
-                    for g in optimizer.param_groups:
-                        g['lr'] = lr
-                    print('Current_lr:' + str(lr))
+            # SGD burn-in
+            if (epoch == 0) & (i <= 1000):
+                lr = lr0 * (i / 1000) ** 4
+                for g in optimizer.param_groups:
+                    g['lr'] = lr
+                print('Current_lr:' + str(lr))
 
-                # Import entrance @ yangming wen
-                # Compute loss, compute gradient, update parameters
+            # Compute loss, compute gradient, update parameters
+            loss = model(imgs.to(device), scenes.to(device), targets)
+            # visualize
+            vis.image(model.exo_rgb[0, :, :, :], win="exo_rgb", opts=dict(title="scene_" + ' images'))
+            vis.image(model.ego_rgb[0, :, :, :], win="ego_rgb", opts=dict(title="input_" + ' images'))
+            gt_bbox, gt_label, predict_bbox, predict_label = print_current_predict(targets, model)
 
-                if opt.worker == 'detection':
-                    loss = model(imgs.to(device), targets)
-                else:
-                    loss = model(imgs.to(device), scenes.to(device), targets)
-                    # visualize
-                    vis.image(model.exo_rgb[0, :, :, :], win="exo_rgb", opts=dict(title="scene_" + ' images'))
-                    vis.image(model.ego_rgb[0, :, :, :], win="ego_rgb", opts=dict(title="input_" + ' images'))
-                    gt_bbox, predict_bbox, predict_label = print_current_predict(targets, model)
-                    # xyxy = (xywh2xyxy(bbox.unsqueeze(0)) * img_size).squeeze(0).tolist()
-                    drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, name='gt_')
-                    drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, name='predict_')
-                loss.backward()
+            drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
+            drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, label=predict_label, name='predict_', vis=vis)
+            drawing_heat_map(input=model.exo_rgb, prediction_all=model.classifier.prediction_all, name='heat_map_', vis=vis)
+            loss.backward()
 
-                # accumulate gradient for x batches before optimizing
-                # if ((i + 1) % accumulated_batches == 0) or (i == len(dataloader) - 1):
-                optimizer.step()
-                optimizer.zero_grad()
+            # @TODO: Muilti-batch here
+            # accumulate gradient for x batches before optimizing
+            # if ((i + 1) % accumulated_batches == 0) or (i == len(dataloader) - 1):
+            optimizer.step()
+            optimizer.zero_grad()
 
-                # Running epoch-means of tracked metrics
-                ui += 1
-                if opt.worker == 'detection':
-                    for key, val in model.losses.items():
-                        rloss[key] = (rloss[key] * ui + val) / (ui + 1)
-                else:
-                    for key, val in model.classifier.losses.items():
-                        rloss[key] = (rloss[key] * ui + val) / (ui + 1)
+            # Running epoch-means of tracked metrics
+            ui += 1
+            for key, val in model.classifier.losses.items():
+                rloss[key] = (rloss[key] * ui + val) / (ui + 1)
 
-                if report:
-                    TP, FP, FN = metrics
-                    metrics += model.losses['metrics']
+            if report:
+                # @TODO: Evaluation Here
+                TP, FP, FN = metrics
+                metrics += model.losses['metrics']
 
-                    # Precision
-                    precision = TP / (TP + FP)
-                    k = (TP + FP) > 0
-                    if k.sum() > 0:
-                        mean_precision = precision[k].mean()
+                # Precision
+                precision = TP / (TP + FP)
+                k = (TP + FP) > 0
+                if k.sum() > 0:
+                    mean_precision = precision[k].mean()
 
-                    # Recall
-                    recall = TP / (TP + FN)
-                    k = (TP + FN) > 0
-                    if k.sum() > 0:
-                        mean_recall = recall[k].mean()
-                if opt.worker == 'detection':
-                    s = ('%8s%12s' + '%10.3g' * 14) % (
-                        '%g/%g' % (epoch, epochs - 1), '%g/%g' % (i, len(dataloader) - 1), rloss['x'],
-                        rloss['y'], rloss['w'], rloss['h'], rloss['conf'], rloss['cls'],
-                        rloss['loss'], mean_precision, mean_recall, model.losses['nT'], model.losses['TP'],
-                        model.losses['FP'], model.losses['FN'], time.time() - t0)
-                    t0 = time.time()
-                    print(s)
-                else:
-                    s = ('%8s%12s' + '%10.3g' * 14) % (
-                        '%g/%g' % (epoch, epochs - 1), '%g/%g' % (i, len(dataloader) - 1), rloss['x'],
-                        rloss['y'], rloss['w'], rloss['h'], rloss['conf'], rloss['cls'],
-                        rloss['loss'], mean_precision, mean_recall, model.classifier.losses['nT'],
-                        model.classifier.losses['TP'],
-                        model.classifier.losses['FP'], model.classifier.losses['FN'], time.time() - t0)
-                    t0 = time.time()
-                    print(s)
+                # Recall
+                recall = TP / (TP + FN)
+                k = (TP + FN) > 0
+                if k.sum() > 0:
+                    mean_recall = recall[k].mean()
+
+            s = ('%8s%12s' + '%10.3g' * 14) % (
+                '%g/%g' % (epoch, epochs - 1), '%g/%g' % (i, len(dataloader) - 1), rloss['x'],
+                rloss['y'], rloss['w'], rloss['h'], rloss['conf'], rloss['cls'],
+                rloss['loss'], mean_precision, mean_recall, model.classifier.losses['nT'],
+                model.classifier.losses['TP'],
+                model.classifier.losses['FP'], model.classifier.losses['FN'], time.time() - t0)
+            t0 = time.time()
+            visLoss.plot_current_errors(epoch, 1, rloss)
+            print(s)
 
             # Update best loss
             # Default NT = 1
             # loss_per_target = rloss['loss'] / rloss['nT']
             loss_per_target = rloss['loss'] / 1
-            # "0.33333 here means 1 / 3 anchors"
             if loss_per_target < best_loss:
                 best_loss = loss_per_target
 
@@ -306,6 +228,7 @@ def train(
                     backup_file_path,
                 ))
 
+                # @TODO: Real Time Test Script
                 # Calculate mAP
                 # mAP, R, P = test.test(
                 #     net_config_path,
@@ -316,7 +239,6 @@ def train(
                 #     gpu_choice=gpu_id,
                 #     worker='first'
                 # )
-
                 # Write epoch results
                 # with open('results.txt', 'a') as file:
                 #     file.write(s + '%11.3g' * 3 % (mAP, P, R) + '\n')
@@ -329,7 +251,6 @@ if __name__ == '__main__':
     parser.add_argument('--accumulated-batches', type=int, default=1, help='number of batches before optimizer step')
     parser.add_argument('--data-config', type=str, default='cfg/coco.data', help='path to data config file')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
-    # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='cfg file path')
     parser.add_argument('--multi-scale', action='store_true', help='random image sizes per batch 320 - 608')
     parser.add_argument('--img_size_extra', type=int, default=32 * 13, help='pixels')
     parser.add_argument('--weights-path', type=str, default='weight_overfit_one_frame_2_1',
@@ -340,12 +261,13 @@ if __name__ == '__main__':
     parser.add_argument('--var', type=float, default=0, help='optional test variable')
     parser.add_argument('--gpu_id', type=str, default='3', help='optional gpu variable')
     parser.add_argument('--worker', type=str, default='first', help='detection or first-person video understand')
+
     opt = parser.parse_args()
     print(opt, end='\n\n')
 
     init_seeds()
-
     torch.cuda.empty_cache()
+
     train(
         opt.cfg,
         opt.data_config,
