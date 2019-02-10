@@ -309,7 +309,7 @@ class load_images_and_labels():  # for training
 
             if self.augment:
                 # random left-right flip
-                lr_flip = True
+                lr_flip = False
                 if lr_flip & (random.random() > 0.5):
                     img = np.fliplr(img)
                     scene_img = np.fliplr(scene_img)
