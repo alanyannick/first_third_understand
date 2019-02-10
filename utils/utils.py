@@ -6,6 +6,8 @@ import torch
 import torch.nn.functional as F
 
 from utils import torch_utils
+from utils.util import tensor2im
+from utils.datasets import normalize_img
 
 # Set printoptions
 torch.set_printoptions(linewidth=1320, precision=5, profile='long')
@@ -103,6 +105,46 @@ def xywh2xyxy(x):  # Convert bounding box format from [x, y, w, h] to [x1, y1, x
     y[:, 2] = (x[:, 0] + x[:, 2] / 2)
     y[:, 3] = (x[:, 1] + x[:, 3] / 2)
     return y
+
+def print_current_predict(targets, model):
+    gt_bbox = np.array(targets[0][0][1:5])
+    print("Gt:")
+    print(gt_bbox)
+    img_size = 416
+    gt_bbox *= img_size
+    gt_bbox[0] = gt_bbox[0] - gt_bbox[2] / 2
+    gt_bbox[1] = gt_bbox[1] - gt_bbox[3] / 2
+    print("Gt:")
+    print(gt_bbox)
+    # get the cls label
+    gt_cls = targets[0][0][0]
+    predict_label = model.classifier.pred_bbox[0]
+    predict_bbox = model.classifier.pred_bbox[1]
+    predict_bbox[0] = predict_bbox[0] - predict_bbox[2] / 2
+    predict_bbox[1] = predict_bbox[1] - predict_bbox[3] / 2
+    stride = 32
+    predict_bbox[0] *= stride
+    predict_bbox[1] *= stride
+    predict_bbox[2] *= stride
+    predict_bbox[3] *= stride
+    print("predict_box:")
+    print(predict_bbox)
+    return gt_bbox, predict_bbox, predict_label
+
+
+def drawing_bbox_gt(input, bbox, name, vis):
+    """
+    input tensor(1,1,1,1), np.bbox(1,1,1,1)
+    """
+    # transfer from rgb 2 bgr, tensor 2 numpy
+    scene_img_np = tensor2im(input)
+    # Draw the box
+    bbox_img = draw_bounding_box(scene_img_np, bbox)
+    # transfer from bgr 2 rgb, numpy 2 tensor
+    bbox_img = torch.from_numpy(bbox_img).unsqueeze(0)
+    # normalize image
+    bbox_img = normalize_img(bbox_img)
+    vis.image(bbox_img[0, :, :, :], win=name, opts=dict(title=name + ' images'))
 
 
 def ap_per_class(tp, conf, pred_cls, target_cls):
