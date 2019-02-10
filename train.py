@@ -3,61 +3,22 @@ import time
 
 # Import test.py to get mAP after each epoch
 import test
-from models import *
+
+# Utils Usage
 from utils.datasets import *
 from utils.utils import *
-from networks.network import First_Third_Net
 from utils.util import *
+
+# Model Definition
+from models import *
+from networks.network import First_Third_Net
 
 DARKNET_WEIGHTS_FILENAME = 'darknet53.conv.74'
 DARKNET_WEIGHTS_URL = 'https://pjreddie.com/media/files/{}'.format(DARKNET_WEIGHTS_FILENAME)
 
+# Visualize Way
 import visdom
-import numpy as np
-
 vis = visdom.Visdom(port=8099)
-
-
-def print_current_predict(targets, model):
-    gt_bbox = np.array(targets[0][0][1:5])
-    print("Gt:")
-    print(gt_bbox)
-    img_size = 416
-    gt_bbox *= img_size
-    gt_bbox[0] = gt_bbox[0] - gt_bbox[2] / 2
-    gt_bbox[1] = gt_bbox[1] - gt_bbox[3] / 2
-    print("Gt:")
-    print(gt_bbox)
-    # get the cls label
-    gt_cls = targets[0][0][0]
-    predict_label = model.classifier.pred_bbox[0]
-    predict_bbox = model.classifier.pred_bbox[1]
-    predict_bbox[0] = predict_bbox[0] - predict_bbox[2] / 2
-    predict_bbox[1] = predict_bbox[1] - predict_bbox[3] / 2
-    stride = 32
-    predict_bbox[0] *= stride
-    predict_bbox[1] *= stride
-    predict_bbox[2] *= stride
-    predict_bbox[3] *= stride
-    print("predict_box:")
-    print(predict_bbox)
-    return gt_bbox, predict_bbox, predict_label
-
-
-def drawing_bbox_gt(input, bbox, name):
-    """
-    input tensor(1,1,1,1), np.bbox(1,1,1,1)
-    """
-    # transfer from rgb 2 bgr, tensor 2 numpy
-    scene_img_np = tensor2im(input)
-    # Draw the box
-    bbox_img = draw_bounding_box(scene_img_np, bbox)
-    # transfer from bgr 2 rgb, numpy 2 tensor
-    bbox_img = torch.from_numpy(bbox_img).unsqueeze(0)
-    # normalize image
-    bbox_img = normalize_img(bbox_img)
-    vis.image(bbox_img[0, :, :, :], win=name, opts=dict(title=name + ' images'))
-
 
 def train(
         net_config_path,
@@ -173,8 +134,6 @@ def train(
         metrics = torch.zeros(3, num_classes)
         optimizer.zero_grad()
 
-        scene_flag = True
-
         for i, (imgs, targets, scenes) in enumerate(dataloader):
             if sum([len(x) for x in targets]) < 1:  # if no targets continue
                 continue
@@ -186,15 +145,14 @@ def train(
                     g['lr'] = lr
                 print('Current_lr:' + str(lr))
 
-            # Import entrance @ yangming wen
             # Compute loss, compute gradient, update parameters
             loss = model(imgs.to(device), scenes.to(device), targets)
             # visualize
             vis.image(model.exo_rgb[0, :, :, :], win="exo_rgb", opts=dict(title="scene_" + ' images'))
             vis.image(model.ego_rgb[0, :, :, :], win="ego_rgb", opts=dict(title="input_" + ' images'))
             gt_bbox, predict_bbox, predict_label = print_current_predict(targets, model)
-            drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, name='gt_')
-            drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, name='predict_')
+            drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, name='gt_', vis=vis)
+            drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, name='predict_', vis=vis)
             loss.backward()
 
             # @TODO: Muilti-batch here
