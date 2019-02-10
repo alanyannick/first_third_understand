@@ -10,16 +10,6 @@ import collections
 import math
 from torch.autograd import Variable
 import torch.nn as nn
-import cv2
-# Converts a Tensor into a Numpy array
-# |imtype|: the desired type of the converted numpy array
-def tensor2im(image_tensor, imtype=np.uint8, channel=0):
-    image_numpy = image_tensor[channel].cpu().float().numpy()
-    if image_numpy.shape[0] == 1:
-        image_numpy = np.tile(image_numpy, (3,1,1))
-    image_numpy = cv2.cvtColor(np.transpose(image_numpy, (1, 2, 0)) * 255.0, cv2.COLOR_RGB2BGR)
-    return image_numpy.astype(imtype)
-
 
 def diagnose_network(net, name='network'):
     mean = 0.0

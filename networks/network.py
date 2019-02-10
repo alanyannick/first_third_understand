@@ -1,26 +1,4 @@
-#############################
-# Usage:
-# Instantiate a model:
-# 	net = Net()
-# Then either load weights from a previous save:
-# 	net.load(savedir)
-# ...or load pre-trained weights into just the 3-chan subnets:
-# 	net.load_pretrained_weights()
-#############################
-
-import sys, os
-from cfg import *
-
 from models import Darknet
-
-# Import 3rd-party project CSAIL's semantic segmentation #
-# sys.path.pop(0)
-# sys.path.pop(0)
-# print('semseg_models', semseg_models)
-# sys.path.insert(0, cfg['semseg']['path'])
-# sys.path.insert(0, os.path.join(cfg['semseg']['path'], 'csail_semseg'))
-# from csail_semseg.models import models as semseg_models
-# Ordinary imports (requiring no kludge on sys.path)
 import torch
 import torch.nn as nn
 import torchvision.models.resnet as resnet
@@ -87,25 +65,14 @@ class First_Third_Net(nn.Module):
             exo_cat = torch.cat([exo_cat, exo_sfn], 1)
 
         concatted_features = torch.cat([ego_cat, exo_cat], 1)
+
         # @Verify the config file channel here
         # print(concatted_features.shape)
         # Note here, the targets dimension should be 1,1,5
+
         loss = self.classifier(concatted_features, self.targets[0].unsqueeze(0))
-
-
         return loss
-
-    # This function is for loading 3rd-party weights, not for weights that you have saved. It will only load weights into the rgb and sfn sub-networks.
-    def load_pretrained_weights(self):
-        fpath = "../weights/yolov3.weights"  # Use yolo_v3/weights/download_weights.sh to download these
-        _3chan_darknets = [self.rgb]
-        for subnet in _3chan_darknets:
-            subnet.load_weights(
-                fpath)
-
-
 
 if __name__ == '__main__':
     net = First_Third_Net()
-    net.load_pretrained_weights()
     net()
