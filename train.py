@@ -17,8 +17,9 @@ DARKNET_WEIGHTS_FILENAME = 'darknet53.conv.74'
 DARKNET_WEIGHTS_URL = 'https://pjreddie.com/media/files/{}'.format(DARKNET_WEIGHTS_FILENAME)
 
 # Visualize Way
+# python -m visdom.server -p 8399
 import visdom
-vis = visdom.Visdom(port=8299)
+vis = visdom.Visdom(port=8399)
 
 def train(
         net_config_path,
@@ -137,7 +138,7 @@ def train(
         metrics = torch.zeros(3, num_classes)
         optimizer.zero_grad()
 
-        for i, (imgs, targets, scenes) in enumerate(dataloader):
+        for i, (imgs, targets, scenes, scenes_gt) in enumerate(dataloader):
             if sum([len(x) for x in targets]) < 1:  # if no targets continue
                 continue
 
@@ -149,12 +150,12 @@ def train(
                 print('Current_lr:' + str(lr))
 
             # Compute loss, compute gradient, update parameters
-            loss = model(imgs.to(device), scenes.to(device), targets)
+            loss = model(imgs.to(device), scenes.to(device), scenes_gt, targets)
             # visualize
             vis.image(model.exo_rgb[0, :, :, :], win="exo_rgb", opts=dict(title="scene_" + ' images'))
             vis.image(model.ego_rgb[0, :, :, :], win="ego_rgb", opts=dict(title="input_" + ' images'))
+            vis.image(model.exo_rgb_gt[0, :, :, :], win="exo_rgb_gt", opts=dict(title="scene_gt_" + ' images'))
             gt_bbox, gt_label, predict_bbox, predict_label = print_current_predict(targets, model)
-
             drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
             drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, label=predict_label, name='predict_', vis=vis)
             drawing_heat_map(input=model.exo_rgb, prediction_all=model.classifier.prediction_all, name='heat_map_', vis=vis)
@@ -195,7 +196,7 @@ def train(
                 model.classifier.losses['TP'],
                 model.classifier.losses['FP'], model.classifier.losses['FN'], time.time() - t0)
             t0 = time.time()
-            visLoss.plot_current_errors(epoch, 1, rloss)
+            visLoss.plot_current_errors(i, 1, rloss)
             print(s)
 
             # Update best loss
@@ -205,28 +206,28 @@ def train(
             if loss_per_target < best_loss:
                 best_loss = loss_per_target
 
-            # Save latest checkpoint
-            checkpoint = {'epoch': epoch,
-                          'best_loss': best_loss,
-                          'model': model.state_dict(),
-                          'optimizer': optimizer.state_dict()}
-            torch.save(checkpoint, latest_weights_file)
+    # Save latest checkpoint
+    checkpoint = {'epoch': epoch,
+                  'best_loss': best_loss,
+                  'model': model.state_dict(),
+                  'optimizer': optimizer.state_dict()}
+    torch.save(checkpoint, latest_weights_file)
 
-            # Save best checkpoint
-            if best_loss == loss_per_target:
-                os.system('cp {} {}'.format(
-                    latest_weights_file,
-                    best_weights_file,
-                ))
+    # Save best checkpoint
+    # if best_loss == loss_per_target:
+    #     os.system('cp {} {}'.format(
+    #         latest_weights_file,
+    #         best_weights_file,
+    #     ))
 
-            # Save backup weights every 5 epochs
-            if (epoch > 0) & (epoch % 2000 == 0):
-                backup_file_name = 'backup{}.pt'.format(epoch)
-                backup_file_path = os.path.join(weights_path, backup_file_name)
-                os.system('cp {} {}'.format(
-                    latest_weights_file,
-                    backup_file_path,
-                ))
+    # Save backup weights every 5 epochs
+    if (epoch > 0) & (epoch % 1 == 0):
+        backup_file_name = 'backup{}.pt'.format(epoch)
+        backup_file_path = os.path.join(weights_path, backup_file_name)
+        os.system('cp {} {}'.format(
+            latest_weights_file,
+            backup_file_path,
+        ))
 
                 # @TODO: Real Time Test Script
                 # Calculate mAP

@@ -71,7 +71,7 @@ class First_Third_Net(nn.Module):
         # print(concatted_features.shape)
         # Note here, the targets dimension should be 1,1,5
 
-        loss = self.classifier(concatted_features, self.targets[0].unsqueeze(0))
+        loss = self.classifier(concatted_features, self.targets)
         return loss
 
 if __name__ == '__main__':
