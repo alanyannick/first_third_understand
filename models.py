@@ -117,7 +117,7 @@ class YOLOLayer(nn.Module):
         self.bbox_predict = 0
 
     def forward(self, x, targets_all=None,):
-        targets = targets_all[0]
+        targets = targets_all
         nA = self.num_anchors
         nB = x.size(0)
         nG = x.size(2)
@@ -168,7 +168,7 @@ class YOLOLayer(nn.Module):
                 pred_boxes=pred_boxes.cpu().data,
                 pred_conf=pred_conf.cpu().data,
                 pred_cls=pred_cls.cpu().data,
-                target=targets.cpu().data.unsqueeze(0),
+                target=targets.cpu().data,
                 anchors=scaled_anchors.cpu().data,
                 num_anchors=nA,
                 num_classes=self.num_classes,
@@ -219,7 +219,7 @@ class YOLOLayer(nn.Module):
             print('Conf:')
             print(pred_conf[conf_mask_true].view(nB, 1))
             print('Cls:')
-            self.label_predict = torch.argmax(pred_cls[mask])
+            self.label_predict = torch.argmax(pred_cls[mask][0])
             print(self.label_predict)
             self.bbox_predict = [self.label_predict, pred_boxes[mask][0]]
             loss_cls = (1 / nB) * self.ce_loss(pred_cls[mask], torch.argmax(tcls[mask], 1))

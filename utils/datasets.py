@@ -345,7 +345,7 @@ class load_images_and_labels():  # for training
                         labels[:, 2] = 1 - labels[:, 2]
 
             img_all.append(img)
-            labels_all.append(torch.from_numpy(labels))
+            labels_all.append(labels)
             scene_all.append(scene_img)
             scene_gt_all.append(scene_gt_img)
 
@@ -353,8 +353,8 @@ class load_images_and_labels():  # for training
         img_all = normalize_img(img_all)
         scene_all = normalize_img(scene_all)
         scene_gt_all = normalize_img(scene_gt_all)
-
-        return torch.from_numpy(img_all), labels_all, torch.from_numpy(scene_all), torch.from_numpy(scene_gt_all)
+        labels_all = np.ascontiguousarray(labels_all, dtype=np.float32)
+        return torch.from_numpy(img_all), torch.from_numpy(labels_all), torch.from_numpy(scene_all), torch.from_numpy(scene_gt_all)
 
 
     def __len__(self):
