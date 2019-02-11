@@ -21,9 +21,10 @@ def normalize_img(img_all):
     return img_all
 
 
-def sv_augmentation(img, scene_img, fraction):
+def sv_augmentation(img, scene_img, scene_gt_img, fraction):
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     scene_img_hsv = cv2.cvtColor(scene_img, cv2.COLOR_BGR2HSV)
+    scene_gt_img_hsv = cv2.cvtColor(scene_gt_img, cv2.COLOR_BGR2HSV)
 
     S = img_hsv[:, :, 1].astype(np.float32)
     V = img_hsv[:, :, 2].astype(np.float32)
@@ -31,21 +32,30 @@ def sv_augmentation(img, scene_img, fraction):
     S_scene = scene_img_hsv[:, :, 1].astype(np.float32)
     V_scene = scene_img_hsv[:, :, 2].astype(np.float32)
 
+    S_scene_gt = scene_gt_img_hsv[:, :, 1].astype(np.float32)
+    V_scene_gt = scene_gt_img_hsv[:, :, 2].astype(np.float32)
+
     a = (random.random() * 2 - 1) * fraction + 1
 
     S *= a
     S_scene *= a
+    S_scene_gt *= a
+
     if a > 1:
         np.clip(S, a_min=0, a_max=255, out=S)
         np.clip(S_scene, a_min=0, a_max=255, out=S_scene)
+        np.clip(S_scene_gt, a_min=0, a_max=255, out=S_scene_gt)
 
     a = (random.random() * 2 - 1) * fraction + 1
 
     V *= a
     V_scene *= a
+    V_scene_gt *= a
+
     if a > 1:
         np.clip(V, a_min=0, a_max=255, out=V)
         np.clip(V_scene, a_min=0, a_max=255, out=V_scene)
+        np.clip(V_scene_gt, a_min=0, a_max=255, out=V_scene_gt)
 
     img_hsv[:, :, 1] = S.astype(np.uint8)
     img_hsv[:, :, 2] = V.astype(np.uint8)
@@ -53,9 +63,12 @@ def sv_augmentation(img, scene_img, fraction):
     scene_img_hsv[:, :, 1] = S_scene.astype(np.uint8)
     scene_img_hsv[:, :, 2] = V_scene.astype(np.uint8)
 
+    scene_gt_img_hsv[:, :, 1] = S_scene_gt.astype(np.uint8)
+    scene_gt_img_hsv[:, :, 2] = V_scene_gt.astype(np.uint8)
     cv2.cvtColor(img_hsv, cv2.COLOR_HSV2BGR, dst=img)
     cv2.cvtColor(scene_img_hsv, cv2.COLOR_HSV2BGR, dst=scene_img)
-    return img, scene_img
+    cv2.cvtColor(scene_gt_img_hsv, cv2.COLOR_HSV2BGR, dst=scene_gt_img)
+    return img, scene_img, scene_gt_img
 
 
 class load_images():  # for inference
@@ -202,6 +215,7 @@ class load_images_and_labels():  # for training
         img_all = []
         labels_all = []
         scene_all = []
+        scene_gt_all = []
 
         for index, files_index in enumerate(range(ia, ib)):
             img_path = self.img_files[self.shuffled_vector[files_index]]
@@ -211,8 +225,10 @@ class load_images_and_labels():  # for training
             scene_flag = True
 
             if scene_flag:
-                scene_path = (img_path.split(img_path.split('-')[-1])[0] + '00001.jpg').replace('images', 'scenes')
+                scene_path = (img_path.split(img_path.split('-')[-1])[0] + '00001.jpg').replace('images', 'scenes').replace('first-', 'third-')
+                scene_gt_path = (img_path).replace('images', 'scenes_gt')
                 scene_img = cv2.imread(scene_path)
+                scene_gt_img = cv2.imread(scene_gt_path)
                 if scene_img is None:
                     assert ("Cannot find the scene image in " + scene_path)
                     continue
@@ -224,11 +240,12 @@ class load_images_and_labels():  # for training
             if self.augment and augment_hsv:
                 # SV augmentation by 50%
                 fraction = 0.50
-                img, scene_img = sv_augmentation(img, scene_img, fraction)
+                img, scene_img, scene_gt_img = sv_augmentation(img, scene_img, scene_gt_img, fraction)
 
             h, w, _ = img.shape
             img, ratio, padw, padh = resize_square(img, height=height, color=(127.5, 127.5, 127.5))
             scene_img, _, _, _ = resize_square(scene_img, height=height, color=(127.5, 127.5, 127.5))
+            scene_gt_img, _, _, _ = resize_square(scene_gt_img, height=height, color=(127.5, 127.5, 127.5))
 
             # Load labels
             if os.path.isfile(label_path):
@@ -291,7 +308,10 @@ class load_images_and_labels():  # for training
 
             # Augment image and labels
             if self.augment:
-                img, scene_img, labels, M = random_affine(img, scene_img, labels, degrees=(-5, 5), translate=(0.10, 0.10), scale=(0.90, 1.10))
+                # random_angle
+                range_angle = False
+                if range_angle:
+                    img, scene_img, labels, M = random_affine(img, scene_img, labels, degrees=(-5, 5), translate=(0.10, 0.10), scale=(0.90, 1.10))
 
             # plot flag here @yangming
             # plotFlag = False
@@ -327,11 +347,14 @@ class load_images_and_labels():  # for training
             img_all.append(img)
             labels_all.append(torch.from_numpy(labels))
             scene_all.append(scene_img)
+            scene_gt_all.append(scene_gt_img)
 
         # Normalize
         img_all = normalize_img(img_all)
         scene_all = normalize_img(scene_all)
-        return torch.from_numpy(img_all), labels_all, torch.from_numpy(scene_all)
+        scene_gt_all = normalize_img(scene_gt_all)
+
+        return torch.from_numpy(img_all), labels_all, torch.from_numpy(scene_all), torch.from_numpy(scene_gt_all)
 
 
     def __len__(self):

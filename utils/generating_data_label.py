@@ -28,7 +28,7 @@ with open(tsv_file_path) as f:
         out_file_link = out_file_dir + ego_link
 
         # get the gt: cls, x_center, y_center, w, h
-        ground_truth = darknet_targets[0].tolist()
+        ground_truth = darknet_targets[index].tolist()
 
         # create the final output txt file here.
         gt_file = open(out_file_link, 'w')

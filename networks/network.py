@@ -35,11 +35,12 @@ class First_Third_Net(nn.Module):
         self.ss_feature_switch = False
         self.sfn_feature_switch = False
 
-    def forward(self, ego_rgb = None, exo_rgb = None, target = None):
+    def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None):
 
         self.exo_rgb = exo_rgb
         self.ego_rgb = ego_rgb
         self.targets = target
+        self.exo_rgb_gt = exo_rgb_gt
 
         # Darknet feature
         ego_rgb = self.rgb(self.ego_rgb)
