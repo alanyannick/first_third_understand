@@ -19,7 +19,7 @@ DARKNET_WEIGHTS_URL = 'https://pjreddie.com/media/files/{}'.format(DARKNET_WEIGH
 # Visualize Way
 # python -m visdom.server -p 8399
 import visdom
-vis = visdom.Visdom(port=8399)
+vis = visdom.Visdom(port=8599)
 
 def train(
         net_config_path,
@@ -34,10 +34,17 @@ def train(
         multi_scale=False,
         freeze_backbone=False,
         var=0,
-        gpu_id='0'
+        gpu_id='0',
+        data_parallel=True,
 ):
-    device = torch_utils.select_device(gpu_choice=gpu_id)
-    print("Using device: \"{}\"".format(device))
+    # Set GPU here
+    if not data_parallel:
+        device = torch_utils.select_device(gpu_choice=gpu_id)
+        print("Using device: \"{}\"".format(device))
+    else:
+        if torch.cuda.device_count() > 1:
+            print("Let's use", torch.cuda.device_count(), "GPUs!")
+            device = torch.device("cuda:0")
 
     if multi_scale:  # pass maximum multi_scale size
         img_size = 608
@@ -49,7 +56,7 @@ def train(
     # Save model path
     latest_weights_file = os.path.join(weights_path, 'latest.pt')
     best_weights_file = os.path.join(weights_path, 'best.pt')
-
+    current_weights_file = os.path.join(weights_path, 'current.pt')
     # Configure run
     data_config = parse_data_config(data_config_path)
     num_classes = int(data_config['classes'])
@@ -57,7 +64,13 @@ def train(
 
     # Initialize model
     # here, for the rgb is 416 = 32 by 13 but for the classifier is 13 by 13
-    model = First_Third_Net(net_config_path)
+    if not data_parallel:
+        model = First_Third_Net(net_config_path)
+        # model.classifier.register_backward_hook()
+    else:
+        # model = nn.DataParallel(First_Third_Net(net_config_path))
+        model = First_Third_Net(net_config_path)
+    model.cuda()
     print(model)
 
     # Get dataloader
@@ -68,7 +81,7 @@ def train(
     if resume:
         checkpoint = torch.load(latest_weights_file, map_location='cpu')
         model.load_state_dict(checkpoint['model'])
-        model.to(device).train()
+        model.cuda().train()
         # Set optimizer
         optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=lr0, momentum=.9)
         start_epoch = checkpoint['epoch'] + 1
@@ -92,7 +105,9 @@ def train(
             print('Init model with Darknet53 training begin >>>>>>')
         else:
             print('Init training begin >>>>>>')
-        model.to(device).train()
+
+        model.cuda().train()
+
         # Set optimizer
         optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=lr0, momentum=.9)
 
@@ -150,15 +165,23 @@ def train(
                 print('Current_lr:' + str(lr))
 
             # Compute loss, compute gradient, update parameters
-            loss = model(imgs.to(device), scenes.to(device), scenes_gt, targets)
+            loss, pred_bbox, prediction_all = model(imgs.to(device), scenes.to(device), scenes_gt, targets)
+
+            model.classifier.module.pred_bbox = pred_bbox
+            model.classifier.module.prediction_all = prediction_all
             # visualize
             vis.image(model.exo_rgb[0, :, :, :], win="exo_rgb", opts=dict(title="scene_" + ' images'))
             vis.image(model.ego_rgb[0, :, :, :], win="ego_rgb", opts=dict(title="input_" + ' images'))
             vis.image(model.exo_rgb_gt[0, :, :, :], win="exo_rgb_gt", opts=dict(title="scene_gt_" + ' images'))
-            gt_bbox, gt_label, predict_bbox, predict_label = print_current_predict(targets, model)
+            gt_bbox, gt_label, predict_bbox, predict_label = print_current_predict(targets, model, data_parallel)
             drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
             drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, label=predict_label, name='predict_', vis=vis)
-            drawing_heat_map(input=model.exo_rgb, prediction_all=model.classifier.prediction_all, name='heat_map_', vis=vis)
+            if data_parallel:
+                drawing_heat_map(input=model.exo_rgb, prediction_all=model.classifier.module.prediction_all, name='heat_map_',
+                                 vis=vis)
+            else:
+                drawing_heat_map(input=model.exo_rgb, prediction_all=model.classifier.prediction_all, name='heat_map_', vis=vis)
+
             loss.backward()
 
             # @TODO: Muilti-batch here
@@ -168,43 +191,61 @@ def train(
             optimizer.zero_grad()
 
             # Running epoch-means of tracked metrics
-            ui += 1
-            for key, val in model.classifier.losses.items():
-                rloss[key] = (rloss[key] * ui + val) / (ui + 1)
+            # ui += 1
+            # if data_parallel:
+            #     for key, val in model.classifier.module.losses.items():
+            #         rloss[key] = (rloss[key] * ui + val) / (ui + 1)
+            # else:
+            #     for key, val in model.classifier.losses.items():
+            #         rloss[key] = (rloss[key] * ui + val) / (ui + 1)
+            #
+            # if report:
+            #     # @TODO: Evaluation Here
+            #     TP, FP, FN = metrics
+            #     metrics += model.losses['metrics']
+            #
+            #     # Precision
+            #     precision = TP / (TP + FP)
+            #     k = (TP + FP) > 0
+            #     if k.sum() > 0:
+            #         mean_precision = precision[k].mean()
+            #
+            #     # Recall
+            #     recall = TP / (TP + FN)
+            #     k = (TP + FN) > 0
+            #     if k.sum() > 0:
+            #         mean_recall = recall[k].mean()
+            #
+            # s = ('%8s%12s' + '%10.3g' * 14) % (
+            #     '%g/%g' % (epoch, epochs - 1), '%g/%g' % (i, len(dataloader) - 1), rloss['x'],
+            #     rloss['y'], rloss['w'], rloss['h'], rloss['conf'], rloss['cls'],
+            #     rloss['loss'], mean_precision, mean_recall, model.classifier.losses['nT'],
+            #     model.classifier.losses['TP'],
+            #     model.classifier.losses['FP'], model.classifier.losses['FN'], time.time() - t0)
+            # t0 = time.time()
+            # visLoss.plot_current_errors(i, 1, rloss)
+            # print(s)
+            #
+            # # Update best loss
+            # # Default NT = 1
+            # # loss_per_target = rloss['loss'] / rloss['nT']W
+            # loss_per_target = rloss['loss'] / 1
+            # if loss_per_target < best_loss:
+            #     best_loss = loss_per_target
 
-            if report:
-                # @TODO: Evaluation Here
-                TP, FP, FN = metrics
-                metrics += model.losses['metrics']
-
-                # Precision
-                precision = TP / (TP + FP)
-                k = (TP + FP) > 0
-                if k.sum() > 0:
-                    mean_precision = precision[k].mean()
-
-                # Recall
-                recall = TP / (TP + FN)
-                k = (TP + FN) > 0
-                if k.sum() > 0:
-                    mean_recall = recall[k].mean()
-
-            s = ('%8s%12s' + '%10.3g' * 14) % (
-                '%g/%g' % (epoch, epochs - 1), '%g/%g' % (i, len(dataloader) - 1), rloss['x'],
-                rloss['y'], rloss['w'], rloss['h'], rloss['conf'], rloss['cls'],
-                rloss['loss'], mean_precision, mean_recall, model.classifier.losses['nT'],
-                model.classifier.losses['TP'],
-                model.classifier.losses['FP'], model.classifier.losses['FN'], time.time() - t0)
-            t0 = time.time()
-            visLoss.plot_current_errors(i, 1, rloss)
-            print(s)
-
-            # Update best loss
-            # Default NT = 1
-            # loss_per_target = rloss['loss'] / rloss['nT']
-            loss_per_target = rloss['loss'] / 1
-            if loss_per_target < best_loss:
-                best_loss = loss_per_target
+            # Save backup weights every 5000 iters
+            if i % 3000 == 0:
+                # backup_file_name = 'backup{}.pt'.format(i)
+                # backup_file_path = os.path.join(weights_path, backup_file_name)
+                # os.system('cp {} {}'.format(
+                #     latest_weights_file,
+                #     backup_file_path,
+                # ))
+                checkpoint = {'epoch': epoch,
+                              'best_loss': best_loss,
+                              'model': model.state_dict(),
+                              'optimizer': optimizer.state_dict()}
+                torch.save(checkpoint, current_weights_file)
 
     # Save latest checkpoint
     checkpoint = {'epoch': epoch,
@@ -220,14 +261,6 @@ def train(
     #         best_weights_file,
     #     ))
 
-    # Save backup weights every 5 epochs
-    if (epoch > 0) & (epoch % 1 == 0):
-        backup_file_name = 'backup{}.pt'.format(epoch)
-        backup_file_path = os.path.join(weights_path, backup_file_name)
-        os.system('cp {} {}'.format(
-            latest_weights_file,
-            backup_file_path,
-        ))
 
                 # @TODO: Real Time Test Script
                 # Calculate mAP

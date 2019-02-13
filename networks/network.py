@@ -2,6 +2,7 @@ from models import Darknet
 import torch
 import torch.nn as nn
 import torchvision.models.resnet as resnet
+from collections import defaultdict
 
 class First_Third_Net(nn.Module):
     def __init__(self, net_conf):
@@ -35,13 +36,23 @@ class First_Third_Net(nn.Module):
         self.ss_feature_switch = False
         self.sfn_feature_switch = False
 
-    def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None):
+        # Data Parallel
+        data_parallel = True
+        if data_parallel:
+            self.losses = {}
+            self.rgb = nn.DataParallel(self.rgb)
+            self.exo_sfn_conv = nn.DataParallel(self.exo_sfn_conv)
+            self.ego_ss_conv = nn.DataParallel(self.ego_ss_conv)
+            self.exo_ss_conv = nn.DataParallel(self.exo_ss_conv)
+            self.classifier = nn.DataParallel(self.classifier)
 
+
+    def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None):
+        self.losses = defaultdict(float)
         self.exo_rgb = exo_rgb
         self.ego_rgb = ego_rgb
         self.targets = target
         self.exo_rgb_gt = exo_rgb_gt
-
         # Darknet feature
         ego_rgb = self.rgb(self.ego_rgb)
         exo_rgb = self.rgb(self.exo_rgb)
@@ -71,8 +82,8 @@ class First_Third_Net(nn.Module):
         # print(concatted_features.shape)
         # Note here, the targets dimension should be 1,1,5
 
-        loss = self.classifier(concatted_features, self.targets)
-        return loss
+        loss, self.pred_box, self.pred_all = self.classifier(concatted_features, self.targets)
+        return sum(loss), self.pred_box, self.pred_all
 
 if __name__ == '__main__':
     net = First_Third_Net()

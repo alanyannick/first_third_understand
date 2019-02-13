@@ -419,7 +419,7 @@ def plot_one_box(x, img, color=None, label=None,
                     lineType=cv2.LINE_AA)
 
 
-def print_current_predict(targets, model):
+def print_current_predict(targets, model, data_parallel):
     gt_bbox = np.array(targets[0][0][1:5])
     print("Gt:")
     print(gt_bbox)
@@ -431,8 +431,12 @@ def print_current_predict(targets, model):
     print(gt_bbox)
     # get the cls label
     gt_label = np.array(targets[0][0][0])
-    predict_label = model.classifier.pred_bbox[0]
-    predict_bbox = model.classifier.pred_bbox[1]
+    if data_parallel:
+        predict_label = model.classifier.module.pred_bbox[0][0]
+        predict_bbox = model.classifier.module.pred_bbox[1][:4]
+    else:
+        predict_label = model.classifier.pred_bbox[0]
+        predict_bbox = model.classifier.pred_bbox[1]
     predict_bbox[0] = predict_bbox[0] - predict_bbox[2] / 2
     predict_bbox[1] = predict_bbox[1] - predict_bbox[3] / 2
     stride = 32

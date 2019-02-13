@@ -284,6 +284,20 @@ class Darknet(nn.Module):
                 if is_training:
                     # x, *losses = module[0](x, targets)
                     x, *losses, self.pred_bbox, self.prediction_all = module[0](x, targets) # every yolo layer (unless it's the end of the network) is followed by a "route" layer, so the "x" here doesn't get used as an input to any layer
+
+                    # # Register parameter when we train by using dataParellel
+                    # self.register_buffer("_pred_box_label",self.pred_bbox[0])
+                    # self.register_buffer("_pred_box", self.pred_bbox[1])
+
+                    # #[output, pred_conf, pred_boxes]
+                    # self.register_buffer("_prediction_all_label", self.prediction_all[0])
+                    # self.register_buffer("_prediction_all_pred_conf", self.prediction_all[1])
+                    # self.register_buffer("_prediction_all_pred_boxes", self.prediction_all[2])
+                    # self.register_parameter("_prediction_all_pred_box", self.prediction_all[2])
+
+                    # setattr(self, 'pred_box', self.pred_bbox)
+                    # setattr(self, 'prediction_all', self.prediction_all)
+
                     for name, loss in zip(self.loss_names, losses):
                         self.losses[name] += loss
                 # Test phase: Get detections
@@ -305,7 +319,8 @@ class Darknet(nn.Module):
         self.losses["precision"] /= 3
         if len(output):
             if is_training:
-                return sum(output) # Return loss
+                return sum(output), self.pred_bbox, self.prediction_all
+                # Return loss and prediction
             else:
                 return torch.cat(output, 1) # \Return predictions
         else:
