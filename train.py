@@ -19,7 +19,7 @@ DARKNET_WEIGHTS_URL = 'https://pjreddie.com/media/files/{}'.format(DARKNET_WEIGH
 # Visualize Way
 # python -m visdom.server -p 8399
 import visdom
-vis = visdom.Visdom(port=8399)
+vis = visdom.Visdom(port=8299)
 
 def train(
         net_config_path,
@@ -206,28 +206,23 @@ def train(
             if loss_per_target < best_loss:
                 best_loss = loss_per_target
 
-    # Save latest checkpoint
-    checkpoint = {'epoch': epoch,
-                  'best_loss': best_loss,
-                  'model': model.state_dict(),
-                  'optimizer': optimizer.state_dict()}
-    torch.save(checkpoint, latest_weights_file)
 
-    # Save best checkpoint
-    # if best_loss == loss_per_target:
-    #     os.system('cp {} {}'.format(
-    #         latest_weights_file,
-    #         best_weights_file,
-    #     ))
 
-    # Save backup weights every 5 epochs
-    if (epoch > 0) & (epoch % 1 == 0):
-        backup_file_name = 'backup{}.pt'.format(epoch)
-        backup_file_path = os.path.join(weights_path, backup_file_name)
-        os.system('cp {} {}'.format(
-            latest_weights_file,
-            backup_file_path,
-        ))
+            # Save best checkpoint
+            # if best_loss == loss_per_target:
+            #     os.system('cp {} {}'.format(
+            #         latest_weights_file,
+            #         best_weights_file,
+            #     ))
+
+            # Save backup weights every 5 epochs
+            if (epoch > 0) & (epoch % 1 == 0):
+                backup_file_name = 'backup{}.pt'.format(epoch)
+                backup_file_path = os.path.join(weights_path, backup_file_name)
+                os.system('cp {} {}'.format(
+                    latest_weights_file,
+                    backup_file_path,
+                ))
 
                 # @TODO: Real Time Test Script
                 # Calculate mAP
@@ -243,6 +238,20 @@ def train(
                 # Write epoch results
                 # with open('results.txt', 'a') as file:
                 #     file.write(s + '%11.3g' * 3 % (mAP, P, R) + '\n')
+            if i % 3000:
+                # Save latest checkpoint
+                checkpoint = {'epoch': i,
+                              'best_loss': best_loss,
+                              'model': model.state_dict(),
+                              'optimizer': optimizer.state_dict()}
+                torch.save(checkpoint, latest_weights_file)
+
+        # Save latest checkpoint
+        checkpoint = {'epoch': epoch,
+                      'best_loss': best_loss,
+                      'model': model.state_dict(),
+                      'optimizer': optimizer.state_dict()}
+        torch.save(checkpoint, best_weights_file)
 
 
 if __name__ == '__main__':

@@ -35,7 +35,8 @@ class First_Third_Net(nn.Module):
         self.ss_feature_switch = False
         self.sfn_feature_switch = False
 
-    def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None):
+    def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, test_mode = False):
+        self.test_mode = test_mode
 
         self.exo_rgb = exo_rgb
         self.ego_rgb = ego_rgb
@@ -70,9 +71,12 @@ class First_Third_Net(nn.Module):
         # @Verify the config file channel here
         # print(concatted_features.shape)
         # Note here, the targets dimension should be 1,1,5
-
-        loss = self.classifier(concatted_features, self.targets)
-        return loss
+        if not test_mode:
+            loss = self.classifier(concatted_features, self.targets, self.test_mode)
+            return loss
+        else:
+            self.bbox_predict, [output, pred_conf, pred_boxes] = self.classifier(concatted_features, self.targets, self.test_mode)
+            return self.bbox_predict, [output, pred_conf, pred_boxes]
 
 if __name__ == '__main__':
     net = First_Third_Net()

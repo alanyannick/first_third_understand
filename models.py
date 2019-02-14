@@ -116,7 +116,7 @@ class YOLOLayer(nn.Module):
         self.ce_loss = nn.CrossEntropyLoss()  # Class loss
         self.bbox_predict = 0
 
-    def forward(self, x, targets_all=None,):
+    def forward(self, x, targets_all=None,test_mode=False):
         targets = targets_all
         nA = self.num_anchors
         nB = x.size(0)
@@ -202,6 +202,7 @@ class YOLOLayer(nn.Module):
             my_tmp = targets.clone().unsqueeze(0).cuda()
             my_tmp[:, 0, 1:5] = my_tmp[:, 0, 1:5] * nG
 
+
             loss_x = self.mse_loss(x[mask], tx[mask])
             loss_y = self.mse_loss(y[mask], ty[mask])
             loss_w = self.mse_loss(w[mask], tw[mask])
@@ -224,30 +225,28 @@ class YOLOLayer(nn.Module):
             self.bbox_predict = [self.label_predict, pred_boxes[mask][0]]
             loss_cls = (1 / nB) * self.ce_loss(pred_cls[mask], torch.argmax(tcls[mask], 1))
             loss = loss_x + loss_y + loss_w + loss_h + loss_conf + loss_cls
-
             # For heat map visualization
             output = torch.cat(
                  (my_tmp.view(nB, 5), pred_boxes[mask], pred_conf[conf_mask_true].view(nB, 1), pred_cls[mask]), 1)
 
-            return (
-                loss,
-                loss_x.item(),
-                loss_y.item(),
-                loss_w.item(),
-                loss_h.item(),
-                loss_conf.item(),
-                loss_cls.item(),
-                recall,
-                precision,
-                self.bbox_predict,
-                [output, pred_conf, pred_boxes]
-            )
-        else:
-            # If not in training phase return predictions
-            output = torch.cat(
-                (self.bbox_predict,
-                 pred_conf), 1)
-            return output
+            if test_mode:
+                return (self.bbox_predict,
+                [output, pred_conf, pred_boxes])
+
+            else:
+                return (
+                    loss,
+                    loss_x.item(),
+                    loss_y.item(),
+                    loss_w.item(),
+                    loss_h.item(),
+                    loss_conf.item(),
+                    loss_cls.item(),
+                    recall,
+                    precision,
+                    self.bbox_predict,
+                    [output, pred_conf, pred_boxes]
+                )
 
 
 class Darknet(nn.Module):
@@ -263,8 +262,7 @@ class Darknet(nn.Module):
         self.pred_bbox = []
         self.prediction_all = []
 
-    def forward(self, x, targets=None):
-        is_training = targets is not None
+    def forward(self, x, targets=None, test_mode = False):
         output = [] # holds either loss (training) or predictions (testing)
         self.losses = defaultdict(float)
         layer_outputs = []
@@ -279,16 +277,15 @@ class Darknet(nn.Module):
                 layer_i = int(module_def["from"])
                 x = layer_outputs[-1] + layer_outputs[layer_i] # resnet connection. the next layer's input is the sum of the previous layer's output and the output of the layer specified in the shortcut block's "from" attributed. see config.
             elif module_def["type"] == "yolo":
-                is_training = True  #targets[1]
                 # Train phase: get loss
-                if is_training:
+                if not test_mode:
                     # x, *losses = module[0](x, targets)
                     x, *losses, self.pred_bbox, self.prediction_all = module[0](x, targets) # every yolo layer (unless it's the end of the network) is followed by a "route" layer, so the "x" here doesn't get used as an input to any layer
                     for name, loss in zip(self.loss_names, losses):
                         self.losses[name] += loss
                 # Test phase: Get detections
                 else:
-                    x = module[0](x,targets)
+                    self.pred_bbox, self.prediction_all = module[0](x,targets,test_mode)
                   #  print(x)
                 output.append(x)
             tmp_dims.append(x.shape)
@@ -304,10 +301,10 @@ class Darknet(nn.Module):
         self.losses["recall"] /= 3
         self.losses["precision"] /= 3
         if len(output):
-            if is_training:
+            if not test_mode:
                 return sum(output) # Return loss
             else:
-                return torch.cat(output, 1) # \Return predictions
+                return self.pred_bbox, self.prediction_all
         else:
             return x # Return features
 
