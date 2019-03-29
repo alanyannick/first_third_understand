@@ -169,7 +169,7 @@ class load_images_scenes():  # for inference
         return self.nB  # number of batches
 
 class load_images_and_labels():  # for training
-    def __init__(self, path, batch_size=1, img_size=608, multi_scale=False, augment=False):
+    def __init__(self, path, batch_size=1, img_size=608, multi_scale=False, augment=False, shuffle_switch=True):
         self.path = path
         # self.img_files = sorted(glob.glob('%s/*.*' % path))
         with open(path, 'r') as file:
@@ -185,6 +185,7 @@ class load_images_and_labels():  # for training
         self.height = img_size
         self.multi_scale = multi_scale
         self.augment = augment
+        self.shuffle_switch = shuffle_switch
 
         assert self.nB > 0, 'No images found in path %s' % path
 
@@ -218,15 +219,19 @@ class load_images_and_labels():  # for training
         scene_gt_all = []
 
         for index, files_index in enumerate(range(ia, ib)):
-            img_path = self.img_files[self.shuffled_vector[files_index]]
-            label_path = self.label_files[self.shuffled_vector[files_index]]
+            if self.shuffle_switch:
+                img_path = self.img_files[self.shuffled_vector[files_index]]
+                label_path = self.label_files[self.shuffled_vector[files_index]]
+            else:
+                img_path = self.img_files[files_index]
+                label_path = self.label_files[files_index]
             img = cv2.imread(img_path)  # BGR
 
             scene_flag = True
 
             if scene_flag:
                 scene_path = (img_path.split(img_path.split('-')[-1])[0] + '00001.jpg').replace('images', 'scenes').replace('first-', 'third-')
-                scene_gt_path = (img_path).replace('images', 'scenes_gt')
+                scene_gt_path = (img_path).replace('images', 'scenes_gt').replace('first-', 'third-')
                 scene_img = cv2.imread(scene_path)
                 scene_gt_img = cv2.imread(scene_gt_path)
                 if scene_img is None:
