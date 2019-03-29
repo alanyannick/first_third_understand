@@ -28,14 +28,15 @@ def test(
         conf_thres=0.3,
         nms_thres=0.45,
         n_cpus=0,
-        gpu_choice = "0",
+        gpu_choice = "3",
         worker ='first',
+        shuffle_switch = False,
 
 ):
 
     # Visualize Way
     # python -m visdom.server -p 8399
-    vis = visdom.Visdom(port=8699)
+    vis = visdom.Visdom(port=8499)
     device = torch_utils.select_device(gpu_choice=gpu_choice)
     print("Using device: \"{}\"".format(device))
 
@@ -65,7 +66,7 @@ def test(
     # Get dataloader
     # dataset = load_images_with_labels(test_path)
     # dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=n_cpus)
-    dataloader = load_images_and_labels(test_path, batch_size=batch_size, img_size=img_size, augment=True)
+    dataloader = load_images_and_labels(test_path, batch_size=batch_size, img_size=img_size, augment=True, shuffle_switch=shuffle_switch)
 
     mean_mAP, mean_R, mean_P = 0.0, 0.0, 0.0
     print('%11s' * 5 % ('Image', 'Total', 'P', 'R', 'mAP'))
@@ -75,7 +76,7 @@ def test(
     ims = []
     txts = []
     links = []
-    out_folder = os.path.join(out_path, 'web/')
+    out_folder = os.path.join(out_path, 'web7/')
     html = HTML(out_folder, 'final_out_html')
     html.add_header('First_Third_Person_Understanding')
 
@@ -95,28 +96,28 @@ def test(
 
                 gt_bbox_img_with_keypoint = drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
                 predict_bbox_img_with_keypoint = drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, label=predict_label, name='predict_', vis=vis)
-                heat_map = drawing_heat_map(input=model.exo_rgb, prediction_all=model.classifier.prediction_all, name='heat_map_',
-                                 vis=vis)
+                # heat_map = drawing_heat_map(input=model.exo_rgb, prediction_all=model.classifier.prediction_all, name='heat_map_',
+                #                    vis=vis)
                 exo_rgb = tensor2im(model.exo_rgb)
                 ego_rgb = tensor2im(model.ego_rgb)
                 exo_rgb_gt = tensor2im(model.exo_rgb_gt)
 
                 out_image_folder = os.path.join(out_folder,'images/')
-                cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_exo.png'), exo_rgb)
                 cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_ego.png'), ego_rgb)
+                cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_exo.png'), exo_rgb)
+                # cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_heat_map.png'), heat_map)
                 cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_exo_rgb_gt.png'), exo_rgb_gt)
                 cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + 'gt_bbox_img_with_keypoint.png'), gt_bbox_img_with_keypoint)
                 cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_predict_bbox_img_with_keypoint.png'), predict_bbox_img_with_keypoint)
-                cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_heat_map.png'), heat_map)
 
-                ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_exo.png',
-                                                   img=exo_rgb)
                 ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_ego.png',
                                                    img=ego_rgb)
+                ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_exo.png',
+                                                   img=exo_rgb)
+                # ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_heat_map.png',
+                #                                          img=heat_map)
                 ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_predict_bbox_img_with_keypoint.png',
                                                    img=predict_bbox_img_with_keypoint)
-                ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_heat_map.png',
-                                                   img=heat_map)
                 ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_exo_rgb_gt.png',
                                                    img=exo_rgb_gt)
                 ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='gt_bbox_img_with_keypoint.png',
@@ -173,7 +174,8 @@ def test(
     #
     #             # Compute Average Precision (AP) per class
     #             AP, AP_class, R, P = ap_per_class(tp=correct, conf=detections[:, 4], pred_cls=detections[:, 6],
-    #                                               target_cls=target_cls)
+    #
+                # target_cls=target_cls)
     #
     #             # Accumulate AP per class
     #             AP_accum_count += np.bincount(AP_class, minlength=nC)
@@ -281,7 +283,7 @@ if __name__ == '__main__':
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
-    parser.add_argument('--out', type=str, default='test_out_result/', help='cfg file path')
+    parser.add_argument('--out', type=str, default='test_out_result_verify/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='path to model config file')
     opt = parser.parse_args()
