@@ -203,7 +203,7 @@ def build_targets(
     th = torch.zeros(nB, nA, nG, nG)
     tconf = torch.ByteTensor(nB, nA, nG, nG).fill_(0)
     tcls = torch.ByteTensor(nB, nA, nG, nG, nC).fill_(0)
-
+    mask_max = torch.zeros(nB, nA, nG, nG)
     nGT = 0
     nCorrect = 0
     for b in range(nB):
@@ -216,6 +216,9 @@ def build_targets(
             # max_ind= torch.argmax(pred_conf[b])
             # mask[b].view(-1)[max_ind]=1
             # conf_mask[b].view(-1)[max_ind]=1
+
+            max_ind= torch.argmax(pred_conf[b])
+            mask_max[b].view(-1)[max_ind]=1
             # Convert to position relative to box
             gx = target[b, t, 1] * nG
             gy = target[b, t, 2] * nG
@@ -260,6 +263,7 @@ def build_targets(
             score = pred_conf[b, best_n, gj, gi]
             if iou > 0.5 and pred_label == target_label and score > 0.5:
                 nCorrect += 1
+            mask = mask_max
 
     return nGT, nCorrect, mask, conf_mask, tx, ty, tw, th, tconf, tcls
 
@@ -461,6 +465,8 @@ def drawing_bbox_gt(input, bbox, label, name, vis):
     bbox_img = normalize_img(bbox_img)
     vis.image(bbox_img[0, :, :, :], win=name, opts=dict(title=name + ' images'))
 
+    return bbox_img_with_keypoint
+
 
 def load_cluster_center_data(cluster_file):
     return joblib.load(cluster_file)
@@ -595,12 +601,13 @@ def drawing_heat_map(input, prediction_all, vis, name, tmp_it=0):
                     prediction_all[1][tmp_it][an_cnt][x_cord][y_cord].detach().cpu().numpy())
                 my_count[cur_box[1]:cur_box[3], cur_box[0]:cur_box[2]] = my_count[cur_box[1]:cur_box[3],
                                                                          cur_box[0]:cur_box[2]] + 1
-    my_heatmap = np.divide(my_sum, my_count)
-
+    my_heatmap =  np.divide(my_sum, my_count)
+    # pl.imshow(my_max, interpolation='bilinear')
+    # pl.imshow(my_heatmap, interpolation='bilinear')
     # height, width, _ = img.shape
     width = 416
     height = 416
-    corresponding_map = cv2.resize(my_heatmap, (width, height))
+    corresponding_map = cv2.resize(my_max, (width, height))
     # normarlize the cmap
     corresponding_map -= corresponding_map.min()
     corresponding_map /= corresponding_map.max()
@@ -612,7 +619,7 @@ def drawing_heat_map(input, prediction_all, vis, name, tmp_it=0):
     final_out = np.uint8(heatmap * 0.3 + scene_img_np * 0.5)
     heat_map = normalize_img(torch.from_numpy(final_out).unsqueeze(0))
     vis.image(heat_map[0, :, :, :], win=name, opts=dict(title=name + ' images'))
-    return heatmap
+    return heat_map
 
 class VisuaLoss():
     def __init__(self, visdom):
