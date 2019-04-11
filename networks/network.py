@@ -1,17 +1,18 @@
-from models import Darknet
+# from models import Darknet
 import torch
 import torch.nn as nn
 import torchvision.models.resnet as resnet
+import model
+from torch.autograd import Variable
+
 
 class First_Third_Net(nn.Module):
-    def __init__(self, net_conf):
+    def __init__(self):
         nn.Module.__init__(self)
-        dark_net_conf = net_conf.split(',')[0]
-        classifier_net_conf = net_conf.split(',')[1]
 
         # Build subnets whose input is RGB maps (images)
-        self.rgb = Darknet(dark_net_conf)
-
+        # self.rgb = Darknet(dark_net_conf)
+        self.rgb = Retina_backbone().cuda()
         # Build subnets whose input is surface normal maps
         self.exo_sfn_conv = nn.Sequential(nn.Conv2d(3, 128, 9, stride=6), nn.Conv2d(128, 128, 5, stride=5))
 
@@ -25,7 +26,7 @@ class First_Third_Net(nn.Module):
             nn.Conv2d(256, 128, 3, stride=2, padding=1))
 
         # Build classifier subnet, which takes concatted features from earlier subnets
-        self.classifier = Darknet(classifier_net_conf)
+        # self.classifier = Darknet(classifier_net_conf)
         for subnet in (self.exo_sfn_conv, self.ego_ss_conv, self.exo_ss_conv, self.classifier):
             for param in subnet.parameters():
                 if param.dim() >= 4:
@@ -78,6 +79,35 @@ class First_Third_Net(nn.Module):
             self.bbox_predict, [output, pred_conf, pred_boxes] = self.classifier(concatted_features, self.targets, self.test_mode)
             return self.bbox_predict, [output, pred_conf, pred_boxes]
 
+
+class Retina_backbone(nn.Module):
+    def __init__(self):
+        nn.Module.__init__(self)
+        import pickle
+        from functools import partial
+        pickle.load = partial(pickle.load, encoding="latin1")
+        pickle.Unpickler = partial(pickle.Unpickler, encoding="latin1")
+        self.retinanet = torch.load('../model/coco_resnet_50_map_0_335.pt', map_location=lambda storage, loc: storage.cuda(0),
+                               pickle_module=pickle)
+        # self.rgb = nn.Sequential(*list(self.retinanet.children())[:-6])
+        self.features = []
+
+    def forward(self, input):
+        x = self.retinanet.conv1(input)
+        x = self.retinanet.bn1(x)
+        x = self.retinanet.relu(x)
+        x = self.retinanet.maxpool(x)
+
+        x1 = self.retinanet.layer1(x)
+        x2 = self.retinanet.layer2(x1)
+        x3 = self.retinanet.layer3(x2)
+        x4 = self.retinanet.layer4(x3)
+        self.features = self.retinanet.fpn([x2, x3, x4])
+        return self.features
+
+
 if __name__ == '__main__':
-    net = First_Third_Net()
+    # net = First_Third_Net()
+    net = Retina_backbone().cuda()
+    net(Variable(torch.randn(1, 3, 928, 640)).cuda().float())
     net()
