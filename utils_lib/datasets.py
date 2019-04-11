@@ -241,11 +241,12 @@ class load_images_and_labels():  # for training
             if img is None:
                 continue
 
-            augment_hsv = True
+            augment_hsv = False
             if self.augment and augment_hsv:
                 # SV augmentation by 50%
                 fraction = 0.50
                 img, scene_img, scene_gt_img = sv_augmentation(img, scene_img, scene_gt_img, fraction)
+
 
             h, w, _ = img.shape
             img, ratio, padw, padh = resize_square(img, height=height, color=(127.5, 127.5, 127.5))
@@ -458,3 +459,6 @@ def convert_tif2bmp(p='../xview/val_images_bmp'):
         print('%g/%g' % (i + 1, len(files)))
         cv2.imwrite(f.replace('.tif', '.bmp'), cv2.imread(f))
         os.system('rm -rf ' + f)
+
+
+

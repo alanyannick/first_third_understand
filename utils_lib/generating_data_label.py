@@ -2,26 +2,28 @@ import torch
 import os
 # create the reference link here
 # Input file
-label_file_path = '/home/yangmingwen/first_third_person/all_data/my_train_test_split/darknet_targets_train.pth'
-tsv_file_path = '/home/yangmingwen/first_third_person/all_data/my_train_test_split/meta_train.tsv'
+label_file_path = '/home/yangmingwen/first_third_person/data_2019_3_15/train_pose_balanced_cluster_removed/darknet_targets_train.pth'
+tsv_file_path = '/home/yangmingwen/first_third_person/data_2019_3_15/train_pose_balanced_cluster_removed/meta_train.tsv'
 
 # Save dir
-out_file_dir = '/home/yangmingwen/first_third_person/all_data/labels/'
+out_file_dir = '/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/labels/'
 # Write file_list dir
-image_file_dir = '/home/yangmingwen/first_third_person/all_data/images/'
-scene_file_dir = '/home/yangmingwen/first_third_person/all_data/scenes/'
+image_file_dir = '/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/images/'
+scene_file_dir = '/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/scenes'
 
 # Output: 1.Get the list of images 2. Get the txt file contained GT
-list_file = open('/home/yangmingwen/first_third_person/all_data/file_list_train.txt', 'w')
+list_file = open('/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/file_list_train_new.txt', 'w')
+
+cxcywh2xyxy = False
 
 # load model to transfer pth gt to mscoco name_file.txt gt
 darknet_targets = torch.load(label_file_path).type(torch.float)
 with open(tsv_file_path) as f:
     source_link = f.readlines()
-    for index in range(0,len(source_link)):
+    for index in range(0, len(source_link)):
         # get the link
         link = source_link[index]
-        
+
         # get the ego_link'
         image_name = link.split('\t')[0].split('/')[-1].split('.jpg')[0]
         ego_link = image_name + '.txt'
@@ -49,6 +51,8 @@ with open(tsv_file_path) as f:
         # get the final listfile
         # list_file.write(ego_out_link + ' ' + exo_out_link + '\n')
         list_file.write(ego_out_link + '\n')
+
+
 
 
 
