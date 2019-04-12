@@ -5,21 +5,23 @@ import pylab as pl
 import test
 
 # Utils Usage
-from utils.datasets import *
-from utils.utils import *
-from utils.util import *
+from utils_lib.datasets import *
+from utils_lib.utils import *
+from utils_lib.util import *
+from focal_loss import FocalLoss
 
 # Model Definition
 from models import *
-from networks.network import First_Third_Net
-
+# from networks.network import First_Third_Net
+from networks import *
+import networks
 DARKNET_WEIGHTS_FILENAME = 'darknet53.conv.74'
 DARKNET_WEIGHTS_URL = 'https://pjreddie.com/media/files/{}'.format(DARKNET_WEIGHTS_FILENAME)
 
 # Visualize Way
 # python -m visdom.server -p 8399
 import visdom
-vis = visdom.Visdom(port=8299)
+vis = visdom.Visdom(port=8399)
 
 def train(
         net_config_path,
@@ -36,9 +38,9 @@ def train(
         var=0,
         gpu_id='0'
 ):
-    device = torch_utils.select_device(gpu_choice=gpu_id)
-    print("Using device: \"{}\"".format(device))
-
+    # device = torch_utils.select_device(gpu_choice=gpu_id)
+    # print("Using device: \"{}\"".format(device))
+    # criterion = FocalLoss()
     if multi_scale:  # pass maximum multi_scale size
         img_size = 608
     else:
@@ -57,18 +59,23 @@ def train(
 
     # Initialize model
     # here, for the rgb is 416 = 32 by 13 but for the classifier is 13 by 13
-    model = First_Third_Net(net_config_path)
+    model = networks.network.First_Third_Net()
+
+    # load_pretained = True
+    # if load_pretained:
+    #     model.load_state_dict(torch.load('./model/net.pth'))
+
     print(model)
 
     # Get dataloader
     dataloader = load_images_and_labels(train_path, batch_size=batch_size, img_size=img_size,
-                                        multi_scale=multi_scale, augment=True)
+                                        multi_scale=multi_scale, augment=False)
 
     lr0 = 0.1
     if resume:
         checkpoint = torch.load(latest_weights_file, map_location='cpu')
         model.load_state_dict(checkpoint['model'])
-        model.to(device).train()
+        model.cuda().train()
         # Set optimizer
         optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=lr0, momentum=.9)
         start_epoch = checkpoint['epoch'] + 1
@@ -92,7 +99,7 @@ def train(
             print('Init model with Darknet53 training begin >>>>>>')
         else:
             print('Init training begin >>>>>>')
-        model.to(device).train()
+        model.cuda().train()
         # Set optimizer
         optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=lr0, momentum=.9)
 
@@ -102,7 +109,7 @@ def train(
     model_info(model)
     t0 = time.time()
     mean_recall, mean_precision = 0, 0
-    from utils.utils import VisuaLoss
+    from utils_lib.utils import VisuaLoss
     visLoss = VisuaLoss(vis)
 
     for epoch in range(epochs):
@@ -150,7 +157,9 @@ def train(
                 print('Current_lr:' + str(lr))
 
             # Compute loss, compute gradient, update parameters
-            loss = model(imgs.to(device), scenes.to(device), scenes_gt, targets)
+            loss = model(imgs.cuda(), scenes.cuda(), scenes_gt, targets)
+
+            # loc_preds, cls_preds = model(imgs.to(device))
             # visualize
             vis.image(model.exo_rgb[0, :, :, :], win="exo_rgb", opts=dict(title="scene_" + ' images'))
             vis.image(model.ego_rgb[0, :, :, :], win="ego_rgb", opts=dict(title="input_" + ' images'))
@@ -159,6 +168,9 @@ def train(
             drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
             drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, label=predict_label, name='predict_', vis=vis)
             drawing_heat_map(input=model.exo_rgb, prediction_all=model.classifier.prediction_all, name='heat_map_', vis=vis)
+
+
+            # loss = criterion(loc_preds, loc_targets, cls_preds, cls_targets)
             loss.backward()
 
             # @TODO: Muilti-batch here
@@ -205,16 +217,6 @@ def train(
             loss_per_target = rloss['loss'] / 1
             if loss_per_target < best_loss:
                 best_loss = loss_per_target
-
-
-
-            # Save best checkpoint
-            # if best_loss == loss_per_target:
-            #     os.system('cp {} {}'.format(
-            #         latest_weights_file,
-            #         best_weights_file,
-            #     ))
-
             # Save backup weights every 5 epochs
             if (epoch > 0) & (epoch % 1 == 0):
                 backup_file_name = 'backup{}.pt'.format(epoch)

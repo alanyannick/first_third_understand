@@ -6,7 +6,7 @@ import joblib
 import torch
 import torch.nn.functional as F
 import pylab as pl
-from utils import torch_utils
+from utils_lib import torch_utils
 
 # Set printoptions
 torch.set_printoptions(linewidth=1320, precision=5, profile='long')
