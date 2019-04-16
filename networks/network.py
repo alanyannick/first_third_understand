@@ -2,9 +2,10 @@
 import torch
 import torch.nn as nn
 import torchvision.models.resnet as resnet
-import model
+# import model
 from torch.autograd import Variable
-from maskrcnn-benchmark.maskrcnn_benchmark.modeling.detector import build_detection_model
+from maskrcnn_benchmark.modeling.detector import build_detection_model
+from maskrcnn_benchmark.config import cfg
 
 import torchvision.transforms as transforms
 
@@ -13,13 +14,16 @@ class First_Third_Net(nn.Module):
         nn.Module.__init__(self)
 
         # Build subnets whose input is RGB maps (images)
-        # self.rgb = Darknet(dark_net_conf)
-        model_name='./maskrcnn-benchmark/maskrcnn-benchmark/demo/retinanet_R-50-FPN_1x_model.pth'
-	cfg='./maskrcnn-benchmark/configs/retinanet/retinanet_R-50-FPN_1x.yaml'
-        self.rgb = torch.nn.DataParallel(build_detection_model(cfg))
+        model_name='/home/yangmingwen/first_third_person/first_third_understanding/retinanet_R-50-FPN_1x_model.pth'
+        config_file ='/home/yangmingwen/first_third_person/first_third_understanding/retinanet_R-50-FPN_1x.yaml'
+        cfg.merge_from_file(config_file)
+        cfg.freeze()
+        self.rgb = build_detection_model(cfg)
+        # self.rgb =  torch.nn.DataParallel(build_detection_model(cfg))
         self.rgb.load_state_dict(torch.load(model_name)['model'])
-	self.rgb=torch.nn.Sequential(*list(self.rgb.module.children())[:-1])
-	self.rgb=self.rgb.cuda()
+        self.rgb=torch.nn.Sequential(*list(self.rgb.module.children())[:-1])
+
+        self.rgb=self.rgb.cuda()
         #self.rgb = Retina_backbone().cuda()
         # Build subnets whose input is surface normal maps
         self.exo_sfn_conv = nn.Sequential(nn.Conv2d(3, 128, 9, stride=6), nn.Conv2d(128, 128, 5, stride=5))
