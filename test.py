@@ -1,11 +1,11 @@
 import argparse
 
 from models import *
-from utils.datasets import *
-from utils.utils import *
-from utils.util import *
+from utils_lib.datasets import *
+from utils_lib.utils import *
+from utils_lib.util import *
 from networks.network import First_Third_Net
-from utils import torch_utils
+from utils_lib import torch_utils
 import visdom
 
 
@@ -65,7 +65,7 @@ def test(
 
     # Get dataloader
     # dataset = load_images_with_labels(test_path)
-    # dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=n_cpus)
+    # dataloader = torch.utils_lib.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=n_cpus)
     dataloader = load_images_and_labels(test_path, batch_size=batch_size, img_size=img_size, augment=True, shuffle_switch=shuffle_switch)
 
     mean_mAP, mean_R, mean_P = 0.0, 0.0, 0.0

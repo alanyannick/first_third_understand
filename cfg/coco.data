@@ -1,8 +1,8 @@
 # Predict Class Num
-classes=15
+classes=20
 # Train Folder
-train=/home/yangmingwen/first_third_person/first_third_understanding/data/datasets/file_list.txt
+train=/home/yangmingwen/first_third_person/first_third_understanding/data/datasets/file_list_new.txt
 # Valid Filder
-valid=/home/yangmingwen/first_third_person/first_third_understanding/data/datasets/file_list.txt
+valid=/home/yangmingwen/first_third_person/first_third_understanding/data/datasets/file_list_new.txt
 # Display name
 names=data/coco.names
