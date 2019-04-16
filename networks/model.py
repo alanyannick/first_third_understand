@@ -12,7 +12,8 @@ import torch.utils.model_zoo as model_zoo
 from utils import BasicBlock, Bottleneck, BBoxTransform, ClipBoxes
 from anchors import Anchors
 import losses
-from lib.nms.pth_nms import pth_nms
+# from lib.nms.pth_nms import pth_nms
+# will require torch == 0.4.0 here
 
 def nms(dets, thresh):
     "Dispatch to either CPU or GPU NMS implementations.\
@@ -612,7 +613,7 @@ def shift(shape, stride, anchors):
     return all_anchors
 
 # ----- basic Op of Utils.py -----
-# from utils import BasicBlock, Bottleneck, BBoxTransform, ClipBoxes
+# from utils_lib import BasicBlock, Bottleneck, BBoxTransform, ClipBoxes
 
 def conv3x3(in_planes, out_planes, stride=1):
     """3x3 convolution with padding"""

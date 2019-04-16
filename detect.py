@@ -2,10 +2,10 @@ import argparse
 import time
 
 from models import *
-from utils.datasets import *
-from utils.utils import *
+from utils_lib.datasets import *
+from utils_lib.utils import *
 from networks.network import First_Third_Net
-from utils import torch_utils
+from utils_lib import torch_utils
 
 
 def detect(

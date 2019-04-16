@@ -8,16 +8,39 @@ import cv2
 import numpy as np
 import torch
 
-# from torch.utils.data import Dataset
-from utils.utils import xyxy2xywh
+import skimage.io
+import skimage.transform
+import skimage.color
+import skimage
+from skimage import img_as_float
+from skimage import img_as_ubyte
+import torchvision.transforms as transforms
+# from torch.utils_lib.data import Dataset
+from utils_lib.utils import xyxy2xywh
 
 
 def normalize_img(img_all):
-    img_all = np.stack(img_all)[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB and cv2 to pytorch
-    img_all = np.ascontiguousarray(img_all, dtype=np.float32)
-    # img_all -= self.rgb_mean
-    # img_all /= self.rgb_std
-    img_all /= 255.0
+    retina_mode = True
+    if retina_mode:
+        normalize = transforms.Compose([transforms.ToTensor(),
+                                        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                             std=[0.229, 0.224, 0.225])])
+        from PIL import Image
+
+        img_all = np.stack(img_all) # BGR to RGB
+        img_all = Image.fromarray(img_all)/255
+        img_all = normalize(img_all)
+
+
+        img_all = img_all.transpose(0, 3, 1, 2)
+        # rgb_mean = np.array([[[0.485, 0.456, 0.406]]])
+        # rgb_std = np.array([[[0.229, 0.224, 0.225]]])
+        # bgr_mean = np.array([[[0.406, 0.456, 0.485]]])
+        # bgr_std = np.array([[[0.225,0.224, 0.229 ]]])
+    else:
+        img_all = np.stack(img_all)[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB and cv2 to pytorch
+        img_all = np.ascontiguousarray(img_all, dtype=np.float32)
+        img_all /= 255.0
     return img_all
 
 
@@ -226,7 +249,6 @@ class load_images_and_labels():  # for training
                 img_path = self.img_files[files_index]
                 label_path = self.label_files[files_index]
             img = cv2.imread(img_path)  # BGR
-
             scene_flag = True
 
             if scene_flag:
@@ -273,7 +295,7 @@ class load_images_and_labels():  # for training
                     # visualize the result here
                     visualize_result = False
                     if visualize_result == True:
-                        import utils.utils as util
+                        import utils_lib.utils as util
                         img_path = '/home/yangmingwen/first_third_person/first_third_understanding/data/datasets/o2-00282_location.jpg'
                         original = cv2.imread(img_path)
                         x1 = labels1[:, 1]
@@ -359,8 +381,11 @@ class load_images_and_labels():  # for training
         img_all = normalize_img(img_all)
         scene_all = normalize_img(scene_all)
         scene_gt_all = normalize_img(scene_gt_all)
+
         labels_all = np.ascontiguousarray(labels_all, dtype=np.float32)
+        return img_all, labels_all, scene_all, scene_gt_all
         return torch.from_numpy(img_all), torch.from_numpy(labels_all), torch.from_numpy(scene_all), torch.from_numpy(scene_gt_all)
+        #         scene_all), torch.from_numpy(scene_gt_all)
 
 
     def __len__(self):
@@ -459,6 +484,44 @@ def convert_tif2bmp(p='../xview/val_images_bmp'):
         print('%g/%g' % (i + 1, len(files)))
         cv2.imwrite(f.replace('.tif', '.bmp'), cv2.imread(f))
         os.system('rm -rf ' + f)
+
+
+class Resizer(object):
+    """Convert ndarrays in sample to Tensors."""
+
+    def __call__(self, sample, min_side=608, max_side=1024):
+        image, annots = sample['img'], sample['annot']
+
+        rows, cols, cns = image.shape
+
+        smallest_side = min(rows, cols)
+
+        # rescale the image so the smallest side is min_side
+        scale = min_side / smallest_side
+
+        # check if the largest side is now greater than max_side, which can happen
+        # when images have a large aspect ratio
+        largest_side = max(rows, cols)
+
+        if largest_side * scale > max_side:
+            scale = max_side / largest_side
+
+        # resize the image with the computed scale
+        image = skimage.transform.resize(image, (int(round(rows*scale)), int(round((cols*scale)))))
+        rows, cols, cns = image.shape
+
+        pad_w = 32 - rows%32
+        pad_h = 32 - cols%32
+
+        new_image = np.zeros((rows + pad_w, cols + pad_h, cns)).astype(np.float32)
+        new_image[:rows, :cols, :] = image.astype(np.float32)
+
+        annots[:, :4] *= scale
+
+        return {'img': torch.from_numpy(new_image), 'annot': torch.from_numpy(annots), 'scale': scale}
+
+
+
 
 
 
