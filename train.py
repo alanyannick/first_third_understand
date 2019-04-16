@@ -157,7 +157,7 @@ def train(
                 print('Current_lr:' + str(lr))
 
             # Compute loss, compute gradient, update parameters
-            loss = model(imgs.cuda(), scenes.cuda(), scenes_gt, targets)
+            loss = model(imgs, scenes, scenes_gt, targets)
 
             # loc_preds, cls_preds = model(imgs.to(device))
             # visualize
