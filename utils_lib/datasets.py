@@ -17,30 +17,14 @@ from skimage import img_as_ubyte
 import torchvision.transforms as transforms
 # from torch.utils_lib.data import Dataset
 from utils_lib.utils import xyxy2xywh
+from torchvision import transforms as T
+import torchvision.transforms as transforms
 
 
 def normalize_img(img_all):
-    retina_mode = True
-    if retina_mode:
-        normalize = transforms.Compose([transforms.ToTensor(),
-                                        transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                             std=[0.229, 0.224, 0.225])])
-        from PIL import Image
-
-        img_all = np.stack(img_all) # BGR to RGB
-        img_all = Image.fromarray(img_all)/255
-        img_all = normalize(img_all)
-
-
-        img_all = img_all.transpose(0, 3, 1, 2)
-        # rgb_mean = np.array([[[0.485, 0.456, 0.406]]])
-        # rgb_std = np.array([[[0.229, 0.224, 0.225]]])
-        # bgr_mean = np.array([[[0.406, 0.456, 0.485]]])
-        # bgr_std = np.array([[[0.225,0.224, 0.229 ]]])
-    else:
-        img_all = np.stack(img_all)[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB and cv2 to pytorch
-        img_all = np.ascontiguousarray(img_all, dtype=np.float32)
-        img_all /= 255.0
+    img_all = np.stack(img_all)[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB and cv2 to pytorch
+    img_all = np.ascontiguousarray(img_all, dtype=np.float32)
+    img_all /= 255.0
     return img_all
 
 
@@ -94,103 +78,6 @@ def sv_augmentation(img, scene_img, scene_gt_img, fraction):
     return img, scene_img, scene_gt_img
 
 
-class load_images():  # for inference
-    def __init__(self, path, batch_size=1, img_size=416):
-        if os.path.isdir(path):
-            image_format = ['.jpg', '.jpeg', '.png', '.tif']
-            self.files = sorted(glob.glob('%s/*.*' % path))
-            self.files = list(filter(lambda x: os.path.splitext(x)[1].lower() in image_format, self.files))
-        elif os.path.isfile(path):
-            self.files = [path]
-
-        self.nF = len(self.files)  # number of image files
-        self.nB = math.ceil(self.nF / batch_size)  # number of batches
-        self.batch_size = batch_size
-        self.height = img_size
-
-        assert self.nF > 0, 'No images found in path %s' % path
-
-        # RGB normalization values
-        # self.rgb_mean = np.array([60.134, 49.697, 40.746], dtype=np.float32).reshape((3, 1, 1))
-        # self.rgb_std = np.array([29.99, 24.498, 22.046], dtype=np.float32).reshape((3, 1, 1))
-
-    def __iter__(self):
-        self.count = -1
-        return self
-
-    def __next__(self):
-        self.count += 1
-        if self.count == self.nB:
-            raise StopIteration
-        img_path = self.files[self.count]
-
-        # Read image
-        img = cv2.imread(img_path)  # BGR
-
-        # Padded resize
-        img, _, _, _ = resize_square(img, height=self.height, color=(127.5, 127.5, 127.5))
-
-        # Normalize RGB
-        img = img[:, :, ::-1].transpose(2, 0, 1)
-        img = np.ascontiguousarray(img, dtype=np.float32)
-        # img -= self.rgb_mean
-        # img /= self.rgb_std
-        img /= 255.0
-
-        return [img_path], img
-
-    def __len__(self):
-        return self.nB  # number of batches
-
-class load_images_scenes():  # for inference
-    def __init__(self, path, batch_size=1, img_size=416):
-        if os.path.isdir(path):
-            image_format = ['.jpg', '.jpeg', '.png', '.tif']
-            self.files = sorted(glob.glob('%s/*.*' % path))
-            self.files = list(filter(lambda x: os.path.splitext(x)[1].lower() in image_format, self.files))
-        elif os.path.isfile(path):
-            self.files = [path]
-
-        self.nF = len(self.files)  # number of image files
-        self.nB = math.ceil(self.nF / batch_size)  # number of batches
-        self.batch_size = batch_size
-        self.height = img_size
-
-        assert self.nF > 0, 'No images found in path %s' % path
-
-        # RGB normalization values
-        # self.rgb_mean = np.array([60.134, 49.697, 40.746], dtype=np.float32).reshape((3, 1, 1))
-        # self.rgb_std = np.array([29.99, 24.498, 22.046], dtype=np.float32).reshape((3, 1, 1))
-
-    def __iter__(self):
-        self.count = -1
-        return self
-
-    def __next__(self):
-        self.count += 1
-        if self.count == self.nB:
-            raise StopIteration
-        img_path = self.files[self.count]
-        scene_path = img_path.replace('samples','scenes')
-        # Read image
-        img = cv2.imread(img_path)  # BGR
-        scene = cv2.imread(scene_path)
-        # Padded resize
-        img, _, _, _ = resize_square(img, height=self.height, color=(127.5, 127.5, 127.5))
-        scene, _, _, _ = resize_square(scene, height=self.height, color=(127.5, 127.5, 127.5))
-        # Normalize RGB
-        img = img[:, :, ::-1].transpose(2, 0, 1)
-        img = np.ascontiguousarray(img, dtype=np.float32)
-        img /= 255.0
-
-        scene = scene[:, :, ::-1].transpose(2, 0, 1)
-        scene = np.ascontiguousarray(scene, dtype=np.float32)
-        scene /= 255.0
-        return [img_path], img, scene
-
-    def __len__(self):
-        return self.nB  # number of batches
-
 class load_images_and_labels():  # for training
     def __init__(self, path, batch_size=1, img_size=608, multi_scale=False, augment=False, shuffle_switch=True):
         self.path = path
@@ -215,6 +102,30 @@ class load_images_and_labels():  # for training
         # RGB normalization values
         # self.rgb_mean = np.array([60.134, 49.697, 40.746], dtype=np.float32).reshape((1, 3, 1, 1))
         # self.rgb_std = np.array([29.99, 24.498, 22.046], dtype=np.float32).reshape((1, 3, 1, 1))
+
+        # Pre-processing transfomer
+        TO_BGR255 = True
+        if TO_BGR255:
+            to_bgr_transform = T.Lambda(lambda x: x * 255)
+        else:
+            to_bgr_transform = T.Lambda(lambda x: x[[2, 1, 0]])
+
+        # Values to be used for image normalization
+        self.PIXEL_MEAN = [102.9801, 115.9465, 122.7717]
+        self.PIXEL_STD = [1., 1., 1.]
+        normalize_transform = T.Normalize(
+            mean=self.PIXEL_MEAN, std=self.PIXEL_STD
+        )
+        # Note here, min_
+        self.transforms = T.Compose(
+            [
+                T.ToPILImage(),
+                T.Resize((800, 800)),
+                T.ToTensor(),
+                to_bgr_transform,
+                normalize_transform,
+            ]
+        )
 
     def __iter__(self):
         self.count = -1
@@ -263,92 +174,24 @@ class load_images_and_labels():  # for training
             if img is None:
                 continue
 
-            augment_hsv = False
-            if self.augment and augment_hsv:
-                # SV augmentation by 50%
-                fraction = 0.50
-                img, scene_img, scene_gt_img = sv_augmentation(img, scene_img, scene_gt_img, fraction)
+            img = self.transforms(img)
+            scene_img = self.transforms(scene_img)
+            scene_gt_img = self.transforms(scene_gt_img)
 
-
-            h, w, _ = img.shape
-            img, ratio, padw, padh = resize_square(img, height=height, color=(127.5, 127.5, 127.5))
-            scene_img, _, _, _ = resize_square(scene_img, height=height, color=(127.5, 127.5, 127.5))
-            scene_gt_img, _, _, _ = resize_square(scene_gt_img, height=height, color=(127.5, 127.5, 127.5))
-
-            # Load labels
+            # Load labels and transfer it from CxCyWH to LxLyRxRy
             if os.path.isfile(label_path):
-                # important here @yangming
-                # for the label, it should be float here
                 labels0 = np.loadtxt(label_path, dtype=np.float32).reshape(-1, 5)
-                # Remeber here the data format should be xywh
-                # Normalized source center_x, center_y, w, h to xywh space
                 labels1 = labels0.copy()
-
-                # @Notice: please remember to get the right w, h firstly
-                # check the xywh
-                check_xywh = False
-                if check_xywh == True:
-                    labels1[:, 3] = w * (labels1[:, 3])
-                    labels1[:, 4] = h * (labels1[:, 4])
-                    labels1[:, 1] = (w * (labels1[:, 1])) - labels1[:, 3] / 2
-                    labels1[:, 2] = (h * (labels1[:, 2])) - labels1[:, 4] / 2
-                    # visualize the result here
-                    visualize_result = False
-                    if visualize_result == True:
-                        import utils_lib.utils as util
-                        img_path = '/home/yangmingwen/first_third_person/first_third_understanding/data/datasets/o2-00282_location.jpg'
-                        original = cv2.imread(img_path)
-                        x1 = labels1[:, 1]
-                        y1 = labels1[:, 2]
-                        width = labels1[:, 3]
-                        height = labels1[:, 4]
-                        bbox = [x1, y1, width, height]
-                        util.draw_bounding_box(original, bbox)
-                        util.plot_one_box([x1, y1, x1+width, y1+height], original)
-
-                    #Normalize xywh from source size to 0-1 xywh / left top x,y, w, h
-                    labels1[:, 3] = (labels1[:, 3])/w
-                    labels1[:, 4] = (labels1[:, 4])/h
-                    labels1[:, 1] = (labels1[:, 1])/w
-                    labels1[:, 2] = (labels1[:, 2])/h
-
-                # Normalized CxCywh (which is the MSCOCO's source method)
-                # to pixel xyxy format with padding
                 labels = labels1.copy()
-                labels[:, 1] = ratio * w * (labels1[:, 1] - labels1[:, 3] / 2) + padw
-                labels[:, 2] = ratio * h * (labels1[:, 2] - labels1[:, 4] / 2) + padh
-                labels[:, 3] = ratio * w * (labels1[:, 1] + labels1[:, 3] / 2) + padw
-                labels[:, 4] = ratio * h * (labels1[:, 2] + labels1[:, 4] / 2) + padh
-
-                # visualize the bbox on 416 size
-                visualize_result = False
-                if visualize_result == True:
-                    WHITE = (255, 0, 255)
-                    c1 = (labels[:, 1], labels[:, 2])
-                    c2 = (labels[:, 3], labels[:, 4])
-                    img_path = '/home/yangmingwen/first_third_person/first_third_understanding/data/datasets/o2-00282_location.jpg'
-                    original = cv2.imread(img_path)
-                    img, ratio, padw, padh = resize_square(original, height=height, color=(127.5, 127.5, 127.5))
-                    cv2.rectangle(img, c1, c2, color=WHITE, thickness=2)
-                    cv2.imwrite('/home/yangmingwen/first_third_person/result.jpg', img)
+                w = 800
+                h = 800
+                ratio = 1.0
+                labels[:, 1] = ratio * w * (labels1[:, 1] - labels1[:, 3] / 2)
+                labels[:, 2] = ratio * h * (labels1[:, 2] - labels1[:, 4] / 2)
+                labels[:, 3] = ratio * w * (labels1[:, 1] + labels1[:, 3] / 2)
+                labels[:, 4] = ratio * h * (labels1[:, 2] + labels1[:, 4] / 2)
             else:
                 labels = np.array([])
-
-            # Augment image and labels
-            if self.augment:
-                # random_angle
-                range_angle = False
-                if range_angle:
-                    img, scene_img, labels, M = random_affine(img, scene_img, labels, degrees=(-5, 5), translate=(0.10, 0.10), scale=(0.90, 1.10))
-
-            # plot flag here @yangming
-            # plotFlag = False
-            # if plotFlag:
-            #     import matplotlib.pyplot as plt
-            #     plt.figure(figsize=(10, 10)) if index == 0 else None
-            #     plt.subplot(4, 4, index + 1).imshow(img[:, :, ::-1])
-            #     plt.plot(labels[:, [1, 3, 3, 1, 1]].T, labels[:, [2, 2, 4, 4, 2]].T, '.-')
-            #     plt.axis('off')
 
             nL = len(labels)
             if nL > 0:
@@ -376,15 +219,9 @@ class load_images_and_labels():  # for training
             labels_all.append(labels)
             scene_all.append(scene_img)
             scene_gt_all.append(scene_gt_img)
-
-        # Normalize
-        img_all = normalize_img(img_all)
-        scene_all = normalize_img(scene_all)
-        scene_gt_all = normalize_img(scene_gt_all)
-
+        # Transfer the label as contin
         labels_all = np.ascontiguousarray(labels_all, dtype=np.float32)
         return img_all, labels_all, scene_all, scene_gt_all
-        return torch.from_numpy(img_all), torch.from_numpy(labels_all), torch.from_numpy(scene_all), torch.from_numpy(scene_gt_all)
         #         scene_all), torch.from_numpy(scene_gt_all)
 
 
@@ -474,53 +311,6 @@ def random_affine(img, scene_img, targets=None, degrees=(-10, 10), translate=(.1
         return imw, sceneimgw, targets, M
     else:
         return imw
-
-
-def convert_tif2bmp(p='../xview/val_images_bmp'):
-    import glob
-    import cv2
-    files = sorted(glob.glob('%s/*.tif' % p))
-    for i, f in enumerate(files):
-        print('%g/%g' % (i + 1, len(files)))
-        cv2.imwrite(f.replace('.tif', '.bmp'), cv2.imread(f))
-        os.system('rm -rf ' + f)
-
-
-class Resizer(object):
-    """Convert ndarrays in sample to Tensors."""
-
-    def __call__(self, sample, min_side=608, max_side=1024):
-        image, annots = sample['img'], sample['annot']
-
-        rows, cols, cns = image.shape
-
-        smallest_side = min(rows, cols)
-
-        # rescale the image so the smallest side is min_side
-        scale = min_side / smallest_side
-
-        # check if the largest side is now greater than max_side, which can happen
-        # when images have a large aspect ratio
-        largest_side = max(rows, cols)
-
-        if largest_side * scale > max_side:
-            scale = max_side / largest_side
-
-        # resize the image with the computed scale
-        image = skimage.transform.resize(image, (int(round(rows*scale)), int(round((cols*scale)))))
-        rows, cols, cns = image.shape
-
-        pad_w = 32 - rows%32
-        pad_h = 32 - cols%32
-
-        new_image = np.zeros((rows + pad_w, cols + pad_h, cns)).astype(np.float32)
-        new_image[:rows, :cols, :] = image.astype(np.float32)
-
-        annots[:, :4] *= scale
-
-        return {'img': torch.from_numpy(new_image), 'annot': torch.from_numpy(annots), 'scale': scale}
-
-
 
 
 
