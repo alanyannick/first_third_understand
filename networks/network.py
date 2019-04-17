@@ -47,16 +47,12 @@ class First_Third_Net(nn.Module):
         self.exo_rgb = torch.stack(exo_rgb)[0]
 # ======================= get the feature pyramid here ==========
         with torch.no_grad():
-            predictions = self.rgb(ego_rgb.unsqueeze(0).cuda())
+            retina_ego_features = self.rgb(self.ego_rgb.cuda())
+            retina_exo_features = self.rgb(self.exo_rgb.cuda())
+            # regression = torch.cat([self.regressionModel(feature) for feature in features], dim=1)
 # =======================First / Second  / third branch here =========================================
-        # Darknet feature
-        ego_rgb = self.rgb(self.ego_rgb)
-        exo_rgb = self.rgb(self.exo_rgb)
-        # Original cat feature
-        ego_cat = ego_rgb
-        exo_cat = exo_rgb
         # Switch for adding ss & sfn feature
-        concatted_features = torch.cat([ego_cat, exo_cat], 1)
+        # concatted_features = torch.cat([retina_ego_features, retina_ego_features], 1)
 
         # @Verify the config file channel here
         # print(concatted_features.shape)
@@ -67,6 +63,15 @@ class First_Third_Net(nn.Module):
         else:
             self.bbox_predict, [output, pred_conf, pred_boxes] = self.classifier(concatted_features, self.targets, self.test_mode)
             return self.bbox_predict, [output, pred_conf, pred_boxes]
+
+
+class egoPoseClassification(nn.Module):
+    def __init__(self, num_features_in, num_anchors=9, num_classes=80, prior=0.01, feature_size=256):
+        super(egoPoseClassification, self).__init__()
+        self.ego_pool = nn.AvgPool2d(13)
+        self.fc = nn.Linear(255, 19)
+        self.fc = nn.DataParallel(self.fc)
+
 
 
 class ClassificationModel(nn.Module):
