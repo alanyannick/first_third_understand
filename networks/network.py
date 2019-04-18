@@ -24,8 +24,15 @@ class First_Third_Net(nn.Module):
         self.rgb = torch.nn.Sequential(*list(self.rgb.module.children())[:-1])
         self.rgb.train()
         self.rgb = self.rgb.cuda()
-        # First Rranch
+        # ====================== detach the rgb gradient =========
+        # self.rgb.detach()
+
+        # First branch
         self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=19)
+
+        # Second Branch
+        self.second_exo_affordance_branch = exoSecondBranchModel(256, num_classes=19)
+
         # class branch
         self.classifier = ClassificationModel(256, num_classes=19)
 
@@ -50,33 +57,37 @@ class First_Third_Net(nn.Module):
         # change the list of tensor to 8x3x800x800
         self.ego_rgb = torch.stack(ego_rgb)
         self.exo_rgb = torch.stack(exo_rgb)
-# ======================= get the feature pyramid here ==========
+    # ======================= get the feature pyramid here ==========
         with torch.no_grad():
             retina_ego_features = self.rgb(self.ego_rgb.cuda())
             retina_exo_features = self.rgb(self.exo_rgb.cuda())
+    # ======================@TBD design a feature merge module here to handle the multi-scale output of the retinaNet
+        # merge_ego_feature_model = self.merge_feature(retina_ego_features)
+        # merge_exo_feature_model = self.merge_feature(retina_exo_features)
+    # ====================== First Branch: ego pose
+        # for cross_entropy / with out B X 1 X Class
+        first_ego_out = self.first_ego_pose_branch(retina_ego_features[0])
+    # ====================== Second Branch: exo affordance
+        # for binary_entropy / with out B X W X H X Class
+        second_exo_out = self.second_exo_affordance_branch(retina_exo_features[0])
+        return first_ego_out, second_exo_out
 
-        # for crossentropy / with out B X 1 X Class
-        first_ego_out = self.first_ego_pose_branch(retina_ego_features)
-
-
+    # =======================First / Second  / third branch here =========================================
+        # Switch for adding ss & sfn feature
+        # concatted_features = torch.cat([retina_ego_features, retina_ego_features], 1)
         # ego_out = torch.cat([self.classifier(feature) for feature in retina_ego_features], dim=1)
         # ego_out = nn.AvgPool2d((ego_out.shape[-2:]))(ego_out)
         # F.interpolate(retina_exo_features, scale_factor=2, mode="nearest")
         # regression = torch.cat([self.regressionModel(feature) for feature in features], dim=1)
-
-# =======================First / Second  / third branch here =========================================
-        # Switch for adding ss & sfn feature
-        # concatted_features = torch.cat([retina_ego_features, retina_ego_features], 1)
-
         # @Verify the config file channel here
         # print(concatted_features.shape)
         # Note here, the targets dimension should be 1,1,5
-        if not test_mode:
-            loss = self.classifier(concatted_features, self.targets, self.test_mode)
-            return loss
-        else:
-            self.bbox_predict, [output, pred_conf, pred_boxes] = self.classifier(concatted_features, self.targets, self.test_mode)
-            return self.bbox_predict, [output, pred_conf, pred_boxes]
+        # if not test_mode:
+        #     loss = self.classifier(concatted_features, self.targets, self.test_mode)
+        #     return loss
+        # else:
+        #     self.bbox_predict, [output, pred_conf, pred_boxes] = self.classifier(concatted_features, self.targets, self.test_mode)
+        #     return self.bbox_predict, [output, pred_conf, pred_boxes]
 
 
 class egoPoseClassification(nn.Module):
@@ -141,6 +152,51 @@ class egoFirstBranchModel(nn.Module):
         # Out is 8 *1 * 19
         out4 = nn.Linear(out3.shape[-1], self.num_classes).cuda()(out3)
         return out4
+
+
+class exoSecondBranchModel(nn.Module):
+    def __init__(self, num_features_in, num_classes=19, prior=0.01, feature_size=256):
+        super(exoSecondBranchModel, self).__init__()
+
+        self.num_classes = num_classes
+        self.conv1 = nn.Conv2d(num_features_in, feature_size, kernel_size=3, padding=1)
+        self.act1 = nn.ReLU()
+
+        self.conv2 = nn.Conv2d(feature_size, feature_size, kernel_size=3, padding=1)
+        self.act2 = nn.ReLU()
+
+        self.conv3 = nn.Conv2d(feature_size, feature_size, kernel_size=3, padding=1)
+        self.act3 = nn.ReLU()
+
+        self.conv4 = nn.Conv2d(feature_size, feature_size, kernel_size=3, padding=1)
+        self.act4 = nn.ReLU()
+
+        # self.output = nn.Conv2d(feature_size, num_anchors * num_classes, kernel_size=3, padding=1)
+        self.output = nn.Conv2d(feature_size, num_classes, kernel_size=3, padding=1)
+        self.output_act = nn.Sigmoid()
+
+    def forward(self, x):
+        out = self.conv1(x)
+        out = self.act1(out)
+
+        out = self.conv2(out)
+        out = self.act2(out)
+
+        out = self.conv3(out)
+        out = self.act3(out)
+
+        out = self.conv4(out)
+        out = self.act4(out)
+
+        out = self.output(out)
+        out = self.output_act(out)
+
+        # out is B x C x W x H, with C = n_classes + n_anchors
+        out1 = out.permute(0, 2, 3, 1)
+        # transfer out to B X W X H X C
+        batch_size, width, height, channels = out1.shape
+        out2 = out1.view(batch_size, width, height, self.num_classes)
+        return out2
 
 
 class ClassificationModel(nn.Module):
