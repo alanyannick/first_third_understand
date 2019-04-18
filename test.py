@@ -7,7 +7,8 @@ from utils_lib.util import *
 from networks.network import First_Third_Net
 from utils_lib import torch_utils
 import visdom
-
+from networks import *
+import networks
 
 def html_append_img(ims, txts, links, batch_i, out_img_folder, name='_exo.png', img=None):
     cv2.imwrite(os.path.join(out_img_folder, 'images_' + str(batch_i) + name), img)
@@ -28,7 +29,7 @@ def test(
         conf_thres=0.3,
         nms_thres=0.45,
         n_cpus=0,
-        gpu_choice = "3",
+        gpu_choice = "0",
         worker ='first',
         shuffle_switch = False,
 
@@ -53,7 +54,7 @@ def test(
     if worker == 'detection':
         model = Darknet(net_config_path, img_size)
     else:
-        model = First_Third_Net(net_config_path)
+        model = networks.network.First_Third_Net()
 
 
     # Load weights
@@ -66,7 +67,7 @@ def test(
     # Get dataloader
     # dataset = load_images_with_labels(test_path)
     # dataloader = torch.utils_lib.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=n_cpus)
-    dataloader = load_images_and_labels(test_path, batch_size=batch_size, img_size=img_size, augment=True, shuffle_switch=shuffle_switch)
+    dataloader = load_images_and_labels(test_path, batch_size=batch_size, img_size=img_size, augment=False, shuffle_switch=shuffle_switch)
 
     mean_mAP, mean_R, mean_P = 0.0, 0.0, 0.0
     print('%11s' * 5 % ('Image', 'Total', 'P', 'R', 'mAP'))
@@ -76,59 +77,92 @@ def test(
     ims = []
     txts = []
     links = []
-    out_folder = os.path.join(out_path, 'web7/')
+    out_folder = os.path.join(out_path, 'web8/')
     html = HTML(out_folder, 'final_out_html')
     html.add_header('First_Third_Person_Understanding')
 
     if scene_flag:
-        for batch_i, (imgs, targets, scenes, scenes_gt) in enumerate(dataloader):
+        for batch_i, (imgs, targets, scenes, scenes_gt, ignore_mask, video_mask) in enumerate(dataloader):
 
             with torch.no_grad():
                 if worker == 'detection':
                     output = model(imgs.cuda())
                 else:
-                    output = model(imgs.cuda(),scenes.cuda(), scenes_gt, targets, test_mode=True)
+                    pose_label, pose_affordance= model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask, test_mode=True)
+                    pose_affordance = pose_affordance.squeeze(0)
 
-                vis.image(model.exo_rgb[0, :, :, :], win="exo_rgb", opts=dict(title="scene_" + ' images'))
-                vis.image(model.ego_rgb[0, :, :, :], win="ego_rgb", opts=dict(title="input_" + ' images'))
-                vis.image(model.exo_rgb_gt[0, :, :, :], win="exo_rgb_gt", opts=dict(title="scene_gt_" + ' images'))
-                gt_bbox, gt_label, predict_bbox, predict_label = print_current_predict(targets, model)
+                    labelmap_rgb = np.zeros((800, 800),
+                                            dtype=np.float16)
+                    each_map_threshold = 40
+                    for i in range(0, pose_affordance.shape[2]):
+                        affordance = cv2.resize((pose_affordance[:, :, i].cpu().float().numpy() * 255), (800,800))
+                        cv2.imwrite('/home/yangmingwen/first_third_person/pose'+str(i)+'.jpg',
+                                    affordance)
+                        # scenes_tmp = np.transpose((scenes_gt[0] + 128).cpu().float().numpy(), (1, 2, 0))
+                        cv2.imwrite('/home/yangmingwen/first_third_person/pose' + str(200) + '.jpg',
+                        np.transpose((scenes_gt[0]+128).cpu().float().numpy(), (1,2,0)))
 
-                gt_bbox_img_with_keypoint = drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
-                predict_bbox_img_with_keypoint = drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, label=predict_label, name='predict_', vis=vis)
-                # heat_map = drawing_heat_map(input=model.exo_rgb, prediction_all=model.classifier.prediction_all, name='heat_map_',
-                #                    vis=vis)
-                exo_rgb = tensor2im(model.exo_rgb)
-                ego_rgb = tensor2im(model.ego_rgb)
-                exo_rgb_gt = tensor2im(model.exo_rgb_gt)
+                        heatmap = cv2.applyColorMap(np.uint8(affordance)
+                                                    , cv2.COLORMAP_JET)
+                        cv2.imwrite('/home/yangmingwen/first_third_person/pose_heat_map' + str(i) + '.jpg', heatmap)
 
-                out_image_folder = os.path.join(out_folder,'images/')
-                cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_ego.png'), ego_rgb)
-                cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_exo.png'), exo_rgb)
-                # cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_heat_map.png'), heat_map)
-                cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_exo_rgb_gt.png'), exo_rgb_gt)
-                cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + 'gt_bbox_img_with_keypoint.png'), gt_bbox_img_with_keypoint)
-                cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_predict_bbox_img_with_keypoint.png'), predict_bbox_img_with_keypoint)
+                        labelmap_rgb[affordance >= each_map_threshold] = affordance[affordance >= each_map_threshold]
+                    heatmap_all = cv2.applyColorMap(np.uint8(labelmap_rgb)
+                                                    , cv2.COLORMAP_JET)
+                    cv2.imwrite('/home/yangmingwen/first_third_person/pose_heat_map' + '.jpg', heatmap_all)
+                        # cv2.imwrite('/home/yangmingwen/first_third_person/pose' + str(300) + '.jpg',
+                            # cv2.cvtColor(affordance, cv2.COLOR_GRAY2RGB)* scenes_tmp + scenes_tmp)
+                # @TBD ===========
+                # get the final affordance
+                debug_region = True
+                if not debug_region:
+                    final_affordace = torch.argmax(pose_affordance, 2).cpu().float().numpy()
+                    cv2.resize((final_affordace), (800, 800))
+                    heatmap = cv2.applyColorMap(np.uint8(affordance)
+                                                , cv2.COLORMAP_JET)
+                    # transfer img dim
+                    scene_img_np = tensor2im(input)
+                    final_out = np.uint8(heatmap * 0.3 + scene_img_np * 0.5)
+                    vis.image(model.exo_rgb[0, :, :, :], win="exo_rgb", opts=dict(title="scene_" + ' images'))
+                    vis.image(model.ego_rgb[0, :, :, :], win="ego_rgb", opts=dict(title="input_" + ' images'))
+                    vis.image(model.exo_rgb_gt[0, :, :, :], win="exo_rgb_gt", opts=dict(title="scene_gt_" + ' images'))
+                    gt_bbox, gt_label, predict_bbox, predict_label = print_current_predict(targets, model)
 
-                ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_ego.png',
-                                                   img=ego_rgb)
-                ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_exo.png',
-                                                   img=exo_rgb)
-                # ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_heat_map.png',
-                #                                          img=heat_map)
-                ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_predict_bbox_img_with_keypoint.png',
-                                                   img=predict_bbox_img_with_keypoint)
-                ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_exo_rgb_gt.png',
-                                                   img=exo_rgb_gt)
-                ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='gt_bbox_img_with_keypoint.png',
-                                                   img=gt_bbox_img_with_keypoint)
+                    gt_bbox_img_with_keypoint = drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
+                    predict_bbox_img_with_keypoint = drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, label=predict_label, name='predict_', vis=vis)
+                    # heat_map = drawing_heat_map(input=model.exo_rgb, prediction_all=model.classifier.prediction_all, name='heat_map_',
+                    #                    vis=vis)
+                    exo_rgb = tensor2im(model.exo_rgb)
+                    ego_rgb = tensor2im(model.ego_rgb)
+                    exo_rgb_gt = tensor2im(model.exo_rgb_gt)
+
+                    out_image_folder = os.path.join(out_folder,'images/')
+                    cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_ego.png'), ego_rgb)
+                    cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_exo.png'), exo_rgb)
+                    # cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_heat_map.png'), heat_map)
+                    cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_exo_rgb_gt.png'), exo_rgb_gt)
+                    cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + 'gt_bbox_img_with_keypoint.png'), gt_bbox_img_with_keypoint)
+                    cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_predict_bbox_img_with_keypoint.png'), predict_bbox_img_with_keypoint)
+
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_ego.png',
+                                                       img=ego_rgb)
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_exo.png',
+                                                       img=exo_rgb)
+                    # ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_heat_map.png',
+                    #                                          img=heat_map)
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_predict_bbox_img_with_keypoint.png',
+                                                       img=predict_bbox_img_with_keypoint)
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_exo_rgb_gt.png',
+                                                       img=exo_rgb_gt)
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='gt_bbox_img_with_keypoint.png',
+                                                       img=gt_bbox_img_with_keypoint)
 
 
-                html.add_images(ims, txts, links)
-                html.save()
-                ims = []
-                txts = []
-                links = []
+                    html.add_images(ims, txts, links)
+                    html.save()
+                    ims = []
+                    txts = []
+                    links = []
 
     #             output = non_max_suppression(output, conf_thres=conf_thres, nms_thres=nms_thres)
     #
@@ -276,7 +310,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weight_train_whole_data_2_13_batch_1/latest.pt', help='path to weights file')
+    parser.add_argument('--weights', type=str, default='weight_retina/latest.pt', help='path to weights file')
     parser.add_argument('--iou-thres', type=float, default=0.2, help='iou threshold required to qualify as detected')
     parser.add_argument('--conf-thres', type=float, default=0.2, help='object confidence threshold')
     parser.add_argument('--nms-thres', type=float, default=0.2, help='iou threshold for non-maximum suppression')
