@@ -107,7 +107,7 @@ class First_Third_Net(nn.Module):
             self.losses['affordance_loss'] = affordance_loss
             return final_loss
         else:
-            return ego_pose_out, exo_affordance_out
+            return torch.argmax(ego_pose_out, -1), exo_affordance_out
 
         # =======================First / Second  / third branch here =========================================
         # Switch for adding ss & sfn feature
