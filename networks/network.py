@@ -70,41 +70,46 @@ class First_Third_Net(nn.Module):
         # change the list of tensor to 8x3x800x800
         self.ego_rgb = torch.stack(ego_rgb)
         self.exo_rgb = torch.stack(exo_rgb)
-    # ======================= get the feature pyramid here ==========
+        # ======================= get the feature pyramid here ==========
         with torch.no_grad():
             retina_ego_features = self.rgb(self.ego_rgb.cuda())
             retina_exo_features = self.rgb(self.exo_rgb.cuda())
-    # ======================@TBD design a feature merge module here to handle the multi-scale output of the retinaNet
+        # ======================@TBD design a feature merge module here to handle the multi-scale output of the retinaNet
         # merge_ego_feature_model = self.merge_feature(retina_ego_features)
         # merge_exo_feature_model = self.merge_feature(retina_exo_features)
 
-    # ====================== First Branch: ego pose
+        # ====================== First Branch: ego pose
         # for cross_entropy / with out B X 1 X Class
         ego_pose_out = self.first_ego_pose_branch(retina_ego_features[3])
-        pose_loss = self.ce_loss(ego_pose_out, torch.LongTensor(self.cls_targets).cuda())
-
         import numpy as np
         if np.array(self.cls_targets).max() == 20:
             print('something wrong happened on target classes, which above the 19')
         # prediction = torch.argmax(first_ego_out, -1)
-    # ====================== Second Branch: exo affordance
+        # ====================== Second Branch: exo affordance
         # get the mask_tensor here
         ignore_mask = torch.from_numpy(np.array(ignore_mask)).float().cuda()
-        gt_ignore_mask = ignore_mask.repeat(19, 1, 1).view(8, 19, 13, 13).permute(0, 2, 3, 1)
+        gt_ignore_mask = ignore_mask.repeat(19, 1, 1).view(ignore_mask.shape[0], 19, 13, 13).permute(0, 2, 3, 1)
         video_mask = torch.from_numpy(np.array(video_mask)).float().cuda()
         gt_video_mask = video_mask.permute(0, 2, 3, 1)
 
         # for binary_entropy / with out B X W X H X Class
         exo_affordance_out = self.second_exo_affordance_branch(retina_exo_features[3])
-        affordance_loss = self.bce_loss(exo_affordance_out[gt_video_mask ==1], gt_video_mask[gt_video_mask == 1]) + \
-                          self.bce_loss(exo_affordance_out[(gt_ignore_mask - gt_video_mask) == 1], gt_video_mask[(gt_ignore_mask - gt_video_mask) == 1])
-        final_loss = pose_loss + affordance_loss
-        self.losses = {}
-        self.losses['pose_loss'] = pose_loss
-        self.losses['affordance_loss'] = affordance_loss
-        return final_loss
 
-    # =======================First / Second  / third branch here =========================================
+        if not test_mode:
+            # Loss
+            pose_loss = self.ce_loss(ego_pose_out, torch.LongTensor(self.cls_targets).cuda())
+            affordance_loss = self.bce_loss(exo_affordance_out[gt_video_mask ==1], gt_video_mask[gt_video_mask == 1]) + \
+                              self.bce_loss(exo_affordance_out[(gt_ignore_mask - gt_video_mask) == 1], gt_video_mask[(gt_ignore_mask - gt_video_mask) == 1]).cuda()
+
+            final_loss = pose_loss + affordance_loss
+            self.losses = {}
+            self.losses['pose_loss'] = pose_loss
+            self.losses['affordance_loss'] = affordance_loss
+            return final_loss
+        else:
+            return ego_pose_out, exo_affordance_out
+
+        # =======================First / Second  / third branch here =========================================
         # Switch for adding ss & sfn feature
         # concatted_features = torch.cat([retina_ego_features, retina_ego_features], 1)
         # ego_out = torch.cat([self.classifier(feature) for feature in retina_ego_features], dim=1)
