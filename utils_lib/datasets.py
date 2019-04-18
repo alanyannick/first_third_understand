@@ -3,7 +3,7 @@ import math
 import os
 import random
 from sys import platform
-
+import pickle
 import cv2
 import numpy as np
 import torch
@@ -116,7 +116,6 @@ class load_images_and_labels():  # for training
         normalize_transform = T.Normalize(
             mean=self.PIXEL_MEAN, std=self.PIXEL_STD
         )
-        # Note here, min_
         self.transforms = T.Compose(
             [
                 T.ToPILImage(),
@@ -126,6 +125,17 @@ class load_images_and_labels():  # for training
                 normalize_transform,
             ]
         )
+
+        # Pick mask
+        affordance_flag = True
+        if affordance_flag:
+            with open('/home/yangmingwen/first_third_person/per_video_gt_files/per_video_gt.pickle', 'rb') as gt_handle:
+                gt_per_video_mask = pickle.load(gt_handle)
+                self.gt_video_mask = gt_per_video_mask
+            with open('/home/yangmingwen/first_third_person/per_video_gt_files/ignore_mask.pickle',
+                      'rb') as ignore_handle:
+                ignore_per_video_mask = pickle.load(ignore_handle)
+                self.ignore_video_mask = ignore_per_video_mask
 
     def __iter__(self):
         self.count = -1
@@ -151,6 +161,8 @@ class load_images_and_labels():  # for training
         labels_all = []
         scene_all = []
         scene_gt_all = []
+        ignore_mask = []
+        video_mask = []
 
         for index, files_index in enumerate(range(ia, ib)):
             if self.shuffle_switch:
@@ -161,7 +173,6 @@ class load_images_and_labels():  # for training
                 label_path = self.label_files[files_index]
             img = cv2.imread(img_path)  # BGR
             scene_flag = True
-
             if scene_flag:
                 scene_path = (img_path.split(img_path.split('-')[-1])[0] + '00001.jpg').replace('images', 'scenes').replace('first-', 'third-')
                 scene_gt_path = (img_path).replace('images', 'scenes_gt').replace('first-', 'third-')
@@ -170,6 +181,12 @@ class load_images_and_labels():  # for training
                 if scene_img is None:
                     assert ("Cannot find the scene image in " + scene_path)
                     continue
+
+            pick_mask = True
+            if pick_mask:
+                video_tag = img_path.split(img_path.split('-')[-1])[0].split('/')[-1].split('first')[0]
+                self.per_video_mask = self.gt_video_mask[video_tag]
+                self.per_video_ignore_mask = self.ignore_video_mask[video_tag]
 
             if img is None:
                 continue
@@ -219,9 +236,12 @@ class load_images_and_labels():  # for training
             labels_all.append(labels)
             scene_all.append(scene_img)
             scene_gt_all.append(scene_gt_img)
+            ignore_mask.append(self.per_video_ignore_mask)
+            video_mask.append(self.per_video_mask)
+
         # Transfer the label as contin
         labels_all = np.ascontiguousarray(labels_all, dtype=np.float32)
-        return img_all, labels_all, scene_all, scene_gt_all
+        return img_all, labels_all, scene_all, scene_gt_all, ignore_mask, video_mask
         #         scene_all), torch.from_numpy(scene_gt_all)
 
 
