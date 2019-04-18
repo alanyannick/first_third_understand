@@ -145,7 +145,7 @@ def train(
         metrics = torch.zeros(3, num_classes)
         optimizer.zero_grad()
 
-        for i, (imgs, targets, scenes, scenes_gt) in enumerate(dataloader):
+        for i, (imgs, targets, scenes, scenes_gt, ignore_mask, video_mask) in enumerate(dataloader):
             if sum([len(x) for x in targets]) < 1:  # if no targets continue
                 continue
 
@@ -157,21 +157,26 @@ def train(
                 print('Current_lr:' + str(lr))
 
             # Compute loss, compute gradient, update parameters
-            loss = model(imgs, scenes, scenes_gt, targets)
+            loss = model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask)
+            loss.backward()
 
             # loc_preds, cls_preds = model(imgs.to(device))
             # visualize
-            vis.image(model.exo_rgb[0, :, :, :], win="exo_rgb", opts=dict(title="scene_" + ' images'))
-            vis.image(model.ego_rgb[0, :, :, :], win="ego_rgb", opts=dict(title="input_" + ' images'))
-            vis.image(model.exo_rgb_gt[0, :, :, :], win="exo_rgb_gt", opts=dict(title="scene_gt_" + ' images'))
-            gt_bbox, gt_label, predict_bbox, predict_label = print_current_predict(targets, model)
-            drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
-            drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, label=predict_label, name='predict_', vis=vis)
-            drawing_heat_map(input=model.exo_rgb, prediction_all=model.classifier.prediction_all, name='heat_map_', vis=vis)
-
-
-            # loss = criterion(loc_preds, loc_targets, cls_preds, cls_targets)
-            loss.backward()
+            # invTrans = transforms.Compose([transforms.Normalize(mean=[0., 0., 0.],
+            #                                                     std=[1 / 1, 1 / 1, 1 / 1]),
+            #                                transforms.Normalize(mean=[102.9801, 115.9465, 122.7717],
+            #                                                     std=[1., 1., 1.]),
+            #                                ])
+            # permute = [2, 1, 0]
+            # vis.image(invTrans(model.exo_rgb[0, :, :, :][permute, :]), win="exo_rgb",
+            #           opts=dict(title="scene1_" + ' images'))
+            # vis.image(model.exo_rgb[0, :, :, :], win="exo_rgb", opts=dict(title="scene_" + ' images'))
+            # vis.image(model.ego_rgb[0, :, :, :], win="ego_rgb", opts=dict(title="input_" + ' images'))
+            # vis.image(model.exo_rgb_gt[0, :, :, :], win="exo_rgb_gt", opts=dict(title="scene_gt_" + ' images'))
+            # gt_bbox, gt_label, predict_bbox, predict_label = print_current_predict(targets, model)
+            # drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
+            # drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, label=predict_label, name='predict_', vis=vis)
+            # drawing_heat_map(input=model.exo_rgb, prediction_all=model.classifier.prediction_all, name='heat_map_', vis=vis)
 
             # @TODO: Muilti-batch here
             # accumulate gradient for x batches before optimizing
@@ -181,42 +186,27 @@ def train(
 
             # Running epoch-means of tracked metrics
             ui += 1
-            for key, val in model.classifier.losses.items():
+            for key, val in model.losses.items():
                 rloss[key] = (rloss[key] * ui + val) / (ui + 1)
 
-            if report:
-                # @TODO: Evaluation Here
-                TP, FP, FN = metrics
-                metrics += model.losses['metrics']
-
-                # Precision
-                precision = TP / (TP + FP)
-                k = (TP + FP) > 0
-                if k.sum() > 0:
-                    mean_precision = precision[k].mean()
-
-                # Recall
-                recall = TP / (TP + FN)
-                k = (TP + FN) > 0
-                if k.sum() > 0:
-                    mean_recall = recall[k].mean()
-
-            s = ('%8s%12s' + '%10.3g' * 14) % (
-                '%g/%g' % (epoch, epochs - 1), '%g/%g' % (i, len(dataloader) - 1), rloss['x'],
-                rloss['y'], rloss['w'], rloss['h'], rloss['conf'], rloss['cls'],
-                rloss['loss'], mean_precision, mean_recall, model.classifier.losses['nT'],
-                model.classifier.losses['TP'],
-                model.classifier.losses['FP'], model.classifier.losses['FN'], time.time() - t0)
+            s =('%g/%g' % (epoch, epochs - 1),
+                       '%g/%g' % (i, len(dataloader) - 1),
+                        'total_loss', loss,
+                        'pose_loss:', rloss['pose_loss'],
+                        'affordance_loss', rloss['affordance_loss'], 'time:', time.time() - t0)
             t0 = time.time()
-            visLoss.plot_current_errors(i, 1, rloss)
             print(s)
+            # visLoss.plot_current_errors(i, 1, rloss)
+
+            # if loss.detach().cpu().numpy():
+
 
             # Update best loss
             # Default NT = 1
             # loss_per_target = rloss['loss'] / rloss['nT']
-            loss_per_target = rloss['loss'] / 1
-            if loss_per_target < best_loss:
-                best_loss = loss_per_target
+            # loss_per_target = rloss['loss'] / 1
+            # if loss_per_target < best_loss:
+            #     best_loss = loss_per_target
             # Save backup weights every 5 epochs
             if (epoch > 0) & (epoch % 1 == 0):
                 backup_file_name = 'backup{}.pt'.format(epoch)
