@@ -49,10 +49,10 @@ class First_Third_Net(nn.Module):
                     if param.dim() >= 4:
                         nn.init.xavier_uniform_(param)
         # Loss definition
-        self.ego_pose_loss= nn.CrossEntropyLoss()
-        exo_affordance_loss = nn.BCELoss()
+        self.ce_loss= nn.CrossEntropyLoss()
+        self.bce_loss = nn.BCELoss(size_average=True)
 
-    def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, test_mode = False):
+    def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, ignore_mask = None, video_mask = None, test_mode = False):
         self.test_mode = test_mode
 
         # GroundTruth
@@ -80,13 +80,29 @@ class First_Third_Net(nn.Module):
 
     # ====================== First Branch: ego pose
         # for cross_entropy / with out B X 1 X Class
-        first_ego_out = self.first_ego_pose_branch(retina_ego_features[0])
-        pose_loss = self.ego_pose_loss(first_ego_out, torch.LongTensor(self.cls_targets).cuda())
+        ego_pose_out = self.first_ego_pose_branch(retina_ego_features[3])
+        pose_loss = self.ce_loss(ego_pose_out, torch.LongTensor(self.cls_targets).cuda())
+
+        import numpy as np
+        if np.array(self.cls_targets).max() == 20:
+            print('something wrong happened on target classes, which above the 19')
         # prediction = torch.argmax(first_ego_out, -1)
     # ====================== Second Branch: exo affordance
+        # get the mask_tensor here
+        ignore_mask = torch.from_numpy(np.array(ignore_mask)).float().cuda()
+        gt_ignore_mask = ignore_mask.repeat(19, 1, 1).view(8, 19, 13, 13).permute(0, 2, 3, 1)
+        video_mask = torch.from_numpy(np.array(video_mask)).float().cuda()
+        gt_video_mask = video_mask.permute(0, 2, 3, 1)
+
         # for binary_entropy / with out B X W X H X Class
-        second_exo_out = self.second_exo_affordance_branch(retina_exo_features[0])
-        return first_ego_out, second_exo_out
+        exo_affordance_out = self.second_exo_affordance_branch(retina_exo_features[3])
+        affordance_loss = self.bce_loss(exo_affordance_out[gt_video_mask ==1], gt_video_mask[gt_video_mask == 1]) + \
+                          self.bce_loss(exo_affordance_out[(gt_ignore_mask - gt_video_mask) == 1], gt_video_mask[(gt_ignore_mask - gt_video_mask) == 1])
+        final_loss = pose_loss + affordance_loss
+        self.losses = {}
+        self.losses['pose_loss'] = pose_loss
+        self.losses['affordance_loss'] = affordance_loss
+        return final_loss
 
     # =======================First / Second  / third branch here =========================================
         # Switch for adding ss & sfn feature
@@ -151,7 +167,8 @@ class egoFirstBranchModel(nn.Module):
         out = self.act4(out)
 
         out = self.output(out)
-        out = self.output_act(out)
+        # Without the sigmoid
+        # out = self.output_act(out)
 
         # out is B x C x W x H, with C = n_classes + n_anchors
         out1 = out.permute(0, 2, 3, 1)
