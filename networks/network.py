@@ -48,11 +48,24 @@ class First_Third_Net(nn.Module):
                 for param in subnet.parameters():
                     if param.dim() >= 4:
                         nn.init.xavier_uniform_(param)
+        # Loss definition
+        self.ego_pose_loss= nn.CrossEntropyLoss()
+        exo_affordance_loss = nn.BCELoss()
 
     def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, test_mode = False):
         self.test_mode = test_mode
+
         # GroundTruth
         self.targets = target
+
+        # Get the Pose GT
+        self.cls_targets = []
+        for i in range(0, self.targets.shape[0]):
+            # label should be long type :) @yangming
+            self.cls_targets.append(self.targets[i][0][0])
+
+        # Get the affordance GT
+
         self.exo_rgb_gt = exo_rgb_gt
         # change the list of tensor to 8x3x800x800
         self.ego_rgb = torch.stack(ego_rgb)
@@ -64,9 +77,12 @@ class First_Third_Net(nn.Module):
     # ======================@TBD design a feature merge module here to handle the multi-scale output of the retinaNet
         # merge_ego_feature_model = self.merge_feature(retina_ego_features)
         # merge_exo_feature_model = self.merge_feature(retina_exo_features)
+
     # ====================== First Branch: ego pose
         # for cross_entropy / with out B X 1 X Class
         first_ego_out = self.first_ego_pose_branch(retina_ego_features[0])
+        pose_loss = self.ego_pose_loss(first_ego_out, torch.LongTensor(self.cls_targets).cuda())
+        # prediction = torch.argmax(first_ego_out, -1)
     # ====================== Second Branch: exo affordance
         # for binary_entropy / with out B X W X H X Class
         second_exo_out = self.second_exo_affordance_branch(retina_exo_features[0])
@@ -148,8 +164,8 @@ class egoFirstBranchModel(nn.Module):
 
         out2 = out1.view(batch_size, width, height, self.num_classes)
         # out is B x WHC
-        out3 = out2.contiguous().view(x.shape[0], 1, width * height * self.num_classes)
-        # Out is 8 *1 * 19
+        out3 = out2.contiguous().view(x.shape[0], width * height * self.num_classes)
+        # Out is 8 * 19
         out4 = nn.Linear(out3.shape[-1], self.num_classes).cuda()(out3)
         return out4
 
@@ -284,6 +300,7 @@ class RegressionModel(nn.Module):
         out = out.permute(0, 2, 3, 1)
 
         return out.contiguous().view(out.shape[0], -1, 4)
+
 
 
 if __name__ == '__main__':
