@@ -9,7 +9,7 @@ from utils_lib.datasets import *
 from utils_lib.utils import *
 from utils_lib.util import *
 from focal_loss import FocalLoss
-
+from torch.optim import lr_scheduler
 # Model Definition
 from models import *
 # from networks.network import First_Third_Net
@@ -105,6 +105,7 @@ def train(
 
     # Set scheduler
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[54, 61], gamma=0.1)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
 
     model_info(model)
     t0 = time.time()
@@ -122,7 +123,7 @@ def train(
         # scheduler.step()
         # Update scheduler (manual)  at 0, 54, 61 epochs to 1e-3, 1e-4, 1e-5
 
-        if epoch > 50:
+        if epoch > 3:
             lr = lr0 / 10
         else:
             lr = lr0
@@ -150,11 +151,13 @@ def train(
                 continue
 
             # SGD burn-in
-            if (epoch == 0) & (i <= 1000):
-                lr = lr0 * (i / 1000) ** 4
-                for g in optimizer.param_groups:
-                    g['lr'] = lr
-                print('Current_lr:' + str(lr))
+            # if (epoch == 0) & (i <= 100):
+            #     lr = lr0 * (i / 1000) ** 4
+            #     for g in optimizer.param_groups:
+            #         g['lr'] = lr
+            #     print('Current_lr:' + str(lr))
+
+            print('Current_lr:' + str(lr))
 
             # Compute loss, compute gradient, update parameters
             loss = model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask)
@@ -191,16 +194,13 @@ def train(
 
             s =('%g/%g' % (epoch, epochs - 1),
                        '%g/%g' % (i, len(dataloader) - 1),
-                        'total_loss', loss,
-                        'pose_loss:', rloss['pose_loss'],
-                        'affordance_loss', rloss['affordance_loss'], 'time:', time.time() - t0)
+                        'total_loss', float(loss),
+                        'pose_loss:', float(rloss['pose_loss']),
+                        'affordance_loss', float(rloss['affordance_loss']), 'time:', time.time() - t0)
             t0 = time.time()
             print(s)
             # visLoss.plot_current_errors(i, 1, rloss)
-
             # if loss.detach().cpu().numpy():
-
-
             # Update best loss
             # Default NT = 1
             # loss_per_target = rloss['loss'] / rloss['nT']
