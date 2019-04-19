@@ -19,6 +19,7 @@ class First_Third_Net(nn.Module):
         cfg.merge_from_file(config_file)
         cfg.freeze()
         self.rgb = build_detection_model(cfg)
+
         self.rgb = torch.nn.DataParallel(build_detection_model(cfg))
         self.rgb.load_state_dict(torch.load(model_name)['model'])
         self.rgb = torch.nn.Sequential(*list(self.rgb.module.children())[:-1])
@@ -65,15 +66,15 @@ class First_Third_Net(nn.Module):
             self.cls_targets.append(self.targets[i][0][0])
 
         # Get the affordance GT
-
+        self.losses = {}
         self.exo_rgb_gt = exo_rgb_gt
         # change the list of tensor to 8x3x800x800
         self.ego_rgb = torch.stack(ego_rgb)
         self.exo_rgb = torch.stack(exo_rgb)
         # ======================= get the feature pyramid here ==========
-        with torch.no_grad():
-            retina_ego_features = self.rgb(self.ego_rgb.cuda())
-            retina_exo_features = self.rgb(self.exo_rgb.cuda())
+        # with torch.no_grad():
+        retina_ego_features = self.rgb(self.ego_rgb.cuda())
+        retina_exo_features = self.rgb(self.exo_rgb.cuda())
         # ======================@TBD design a feature merge module here to handle the multi-scale output of the retinaNet
         # merge_ego_feature_model = self.merge_feature(retina_ego_features)
         # merge_exo_feature_model = self.merge_feature(retina_exo_features)
@@ -84,6 +85,8 @@ class First_Third_Net(nn.Module):
         import numpy as np
         if np.array(self.cls_targets).max() == 20:
             print('something wrong happened on target classes, which above the 19')
+        if np.array(self.cls_targets).max() == 19:
+            print('something wrong happened on target classes, which above the 18')
         # prediction = torch.argmax(first_ego_out, -1)
         # ====================== Second Branch: exo affordance
         # get the mask_tensor here
@@ -97,12 +100,16 @@ class First_Third_Net(nn.Module):
 
         if not test_mode:
             # Loss
+            # for i in range(0, len(self.cls_targets)):
+            #     self.cls_targets[i] = 1
+
             pose_loss = self.ce_loss(ego_pose_out, torch.LongTensor(self.cls_targets).cuda())
+            # print('targets:')
+            # print(self.cls_targets)
             affordance_loss = self.bce_loss(exo_affordance_out[gt_video_mask ==1], gt_video_mask[gt_video_mask == 1]) + \
                               self.bce_loss(exo_affordance_out[(gt_ignore_mask - gt_video_mask) == 1], gt_video_mask[(gt_ignore_mask - gt_video_mask) == 1]).cuda()
 
             final_loss = pose_loss + affordance_loss
-            self.losses = {}
             self.losses['pose_loss'] = pose_loss
             self.losses['affordance_loss'] = affordance_loss
             return final_loss
@@ -139,7 +146,7 @@ class egoPoseClassification(nn.Module):
 class egoFirstBranchModel(nn.Module):
     def __init__(self, num_features_in, num_classes=19, prior=0.01, feature_size=256):
         super(egoFirstBranchModel, self).__init__()
-
+        self.feature_size = feature_size
         self.num_classes = num_classes
 
         self.conv1 = nn.Conv2d(num_features_in, feature_size, kernel_size=3, padding=1)
@@ -155,8 +162,11 @@ class egoFirstBranchModel(nn.Module):
         self.act4 = nn.ReLU()
 
         # self.output = nn.Conv2d(feature_size, num_anchors * num_classes, kernel_size=3, padding=1)
-        self.output = nn.Conv2d(feature_size, num_classes, kernel_size=3, padding=1)
-        self.output_act = nn.Sigmoid()
+        self.output = nn.Conv2d(feature_size, int(feature_size/2), kernel_size=3, padding=1, stride=2)
+
+        # Linear (# batch size)
+        self.linear1 = nn.Linear(7*7*128, 4096)
+        self.linear2 = nn.Linear(4096,  self.num_classes)
 
     def forward(self, x):
         out = self.conv1(x)
@@ -172,24 +182,14 @@ class egoFirstBranchModel(nn.Module):
         out = self.act4(out)
 
         out = self.output(out)
-        # Without the sigmoid
-        # out = self.output_act(out)
+        batch_size, channels, width, height  = out.shape
 
-        # out is B x C x W x H, with C = n_classes + n_anchors
-        out1 = out.permute(0, 2, 3, 1)
-
-        batch_size, width, height, channels = out1.shape
-
-        # out2 = out1.view(batch_size, width, height, self.num_anchors, self.num_classes)
-        # out2 = out1.view(batch_size, width, height, self.num_classes)
-        # return out2.contiguous().view(x.shape[0], -1, self.num_classes)
-
-        out2 = out1.view(batch_size, width, height, self.num_classes)
         # out is B x WHC
-        out3 = out2.contiguous().view(x.shape[0], width * height * self.num_classes)
+        out1 = out.contiguous().view(x.shape[0], width * height * int(self.feature_size/2))
         # Out is 8 * 19
-        out4 = nn.Linear(out3.shape[-1], self.num_classes).cuda()(out3)
-        return out4
+        out2 = self.linear1(out1)
+        out3 = self.linear2(out2)
+        return out3
 
 
 class exoSecondBranchModel(nn.Module):
