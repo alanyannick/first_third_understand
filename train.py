@@ -71,7 +71,7 @@ def train(
     dataloader = load_images_and_labels(train_path, batch_size=batch_size, img_size=img_size,
                                         multi_scale=multi_scale, augment=False)
 
-    lr0 = 0.1
+    lr0 = 0.01
     if resume:
         checkpoint = torch.load(latest_weights_file, map_location='cpu')
         model.load_state_dict(checkpoint['model'])
@@ -188,15 +188,15 @@ def train(
             optimizer.zero_grad()
 
             # Running epoch-means of tracked metrics
-            ui += 1
-            for key, val in model.losses.items():
-                rloss[key] = (rloss[key] * ui + val) / (ui + 1)
+            # ui += 1
+            # for key, val in model.losses.items():
+            #     rloss[key] = rloss[key] #  (rloss[key] * ui + val) / (ui + 1)
 
             s =('%g/%g' % (epoch, epochs - 1),
                        '%g/%g' % (i, len(dataloader) - 1),
                         'total_loss', float(loss),
-                        'pose_loss:', float(rloss['pose_loss']),
-                        'affordance_loss', float(rloss['affordance_loss']), 'time:', time.time() - t0)
+                        'pose_loss:', float(model.losses['pose_loss']),
+                        'affordance_loss', float(model.losses['affordance_loss']), 'time:', time.time() - t0)
             t0 = time.time()
             print(s)
             # visLoss.plot_current_errors(i, 1, rloss)
