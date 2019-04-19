@@ -83,7 +83,8 @@ def test(
 
     if scene_flag:
         for batch_i, (imgs, targets, scenes, scenes_gt, ignore_mask, video_mask) in enumerate(dataloader):
-
+            if batch_i > 500:
+                break
             with torch.no_grad():
                 if worker == 'detection':
                     output = model(imgs.cuda())
@@ -96,20 +97,20 @@ def test(
                     each_map_threshold = 40
                     for i in range(0, pose_affordance.shape[2]):
                         affordance = cv2.resize((pose_affordance[:, :, i].cpu().float().numpy() * 255), (800,800))
-                        cv2.imwrite('/home/yangmingwen/first_third_person/pose'+str(i)+'.jpg',
+                        cv2.imwrite('/home/yangmingwen/first_third_person/out/batch_'+str(batch_i)+'pose'+str(i)+'.jpg',
                                     affordance)
                         # scenes_tmp = np.transpose((scenes_gt[0] + 128).cpu().float().numpy(), (1, 2, 0))
-                        cv2.imwrite('/home/yangmingwen/first_third_person/pose' + str(200) + '.jpg',
+                        cv2.imwrite('/home/yangmingwen/first_third_person/out/batch_'+str(batch_i)+'pose' + str(20) + '.jpg',
                         np.transpose((scenes_gt[0]+128).cpu().float().numpy(), (1,2,0)))
 
                         heatmap = cv2.applyColorMap(np.uint8(affordance)
                                                     , cv2.COLORMAP_JET)
-                        cv2.imwrite('/home/yangmingwen/first_third_person/pose_heat_map' + str(i) + '.jpg', heatmap)
+                        cv2.imwrite('/home/yangmingwen/first_third_person/out/batch_'+str(batch_i)+'pose_heat_map' + str(i) + '.jpg', heatmap)
 
                         labelmap_rgb[affordance >= each_map_threshold] = affordance[affordance >= each_map_threshold]
                     heatmap_all = cv2.applyColorMap(np.uint8(labelmap_rgb)
                                                     , cv2.COLORMAP_JET)
-                    cv2.imwrite('/home/yangmingwen/first_third_person/pose_heat_map' + '.jpg', heatmap_all)
+                    cv2.imwrite('/home/yangmingwen/first_third_person/out/batch_'+str(batch_i)+'pose_heat_map' + '.jpg', heatmap_all)
                         # cv2.imwrite('/home/yangmingwen/first_third_person/pose' + str(300) + '.jpg',
                             # cv2.cvtColor(affordance, cv2.COLOR_GRAY2RGB)* scenes_tmp + scenes_tmp)
                 # @TBD ===========
