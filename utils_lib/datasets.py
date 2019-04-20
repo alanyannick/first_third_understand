@@ -129,10 +129,10 @@ class load_images_and_labels():  # for training
         # Pick mask
         affordance_flag = True
         if affordance_flag:
-            with open('/home/yangmingwen/first_third_person/per_video_gt_files/per_video_gt.pickle', 'rb') as gt_handle:
+            with open('/home/yangmingwen/first_third_person/merged_clusters/per_video_gt_merged.pickle', 'rb') as gt_handle:
                 gt_per_video_mask = pickle.load(gt_handle)
                 self.gt_video_mask = gt_per_video_mask
-            with open('/home/yangmingwen/first_third_person/per_video_gt_files/ignore_mask.pickle',
+            with open('/home/yangmingwen/first_third_person/merged_clusters/ignore_mask_merged.pickle',
                       'rb') as ignore_handle:
                 ignore_per_video_mask = pickle.load(ignore_handle)
                 self.ignore_video_mask = ignore_per_video_mask
@@ -185,8 +185,14 @@ class load_images_and_labels():  # for training
             pick_mask = True
             if pick_mask:
                 video_tag = img_path.split(img_path.split('-')[-1])[0].split('/')[-1].split('first')[0]
-                self.per_video_mask = self.gt_video_mask[video_tag]
-                self.per_video_ignore_mask = self.ignore_video_mask[video_tag]
+                try:
+                    self.per_video_mask = self.gt_video_mask[video_tag]
+                    self.per_video_ignore_mask = self.ignore_video_mask[video_tag]
+                except:
+                    print('Test_Mode: Do not care about the gt_video_mask')
+                    video_tag = '0EU2AEGO_1_'
+                    self.per_video_mask = self.gt_video_mask[video_tag]
+                    self.per_video_ignore_mask = self.ignore_video_mask[video_tag]
 
             if img is None:
                 continue
