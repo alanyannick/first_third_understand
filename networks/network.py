@@ -29,7 +29,7 @@ class First_Third_Net(nn.Module):
         # self.rgb.detach()
 
         # First branch
-        self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=5)
+        self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=4)
 
         # Second Branch
         self.second_exo_affordance_branch = exoSecondBranchModel(256, num_classes=15)
@@ -141,7 +141,7 @@ class First_Third_Net(nn.Module):
 
 
 class egoFirstBranchModel(nn.Module):
-    def __init__(self, num_features_in, num_classes=5, prior=0.01, feature_size=256):
+    def __init__(self, num_features_in, num_classes=4, prior=0.01, feature_size=256):
         super(egoFirstBranchModel, self).__init__()
         self.feature_size = feature_size
         self.num_classes = num_classes
