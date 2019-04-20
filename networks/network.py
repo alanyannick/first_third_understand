@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from maskrcnn_benchmark.modeling.detector import build_detection_model
 from maskrcnn_benchmark.config import cfg
-
+import numpy as np
 
 class First_Third_Net(nn.Module):
     def __init__(self):
@@ -29,19 +29,19 @@ class First_Third_Net(nn.Module):
         # self.rgb.detach()
 
         # First branch
-        self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=19)
+        self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=5)
 
         # Second Branch
-        self.second_exo_affordance_branch = exoSecondBranchModel(256, num_classes=19)
+        self.second_exo_affordance_branch = exoSecondBranchModel(256, num_classes=15)
 
         # Third Branch
         # self.third_affordance_branch = ThirdBranchModel(256, num_classes=19)
 
         # class branch
-        self.classifier = ClassificationModel(256, num_classes=19)
+        # self.classifier = ClassificationModel(256, num_classes=19)
 
         # Regression branch
-        self.regressor = RegressionModel(256)
+        # self.regressor = RegressionModel(256)
 
         # Compress the final channel
         # self.fc_ego_pool = nn.MaxPool2d(2,2)
@@ -90,16 +90,10 @@ class First_Third_Net(nn.Module):
         # Sigmoid = torch.nn.Sigmoid()
         # ego_pose_out = Sigmoid(ego_pose_out)
 
-        import numpy as np
-        if np.array(self.cls_targets).max() == 20:
-            print('something wrong happened on target classes, which above the 19')
-        if np.array(self.cls_targets).max() == 19:
-            print('something wrong happened on target classes, which above the 18')
-
         # ====================== Second Branch: exo affordance
         # get the mask_tensor here
         ignore_mask = torch.from_numpy(np.array(ignore_mask)).float().cuda()
-        gt_ignore_mask = ignore_mask.repeat(19, 1, 1).view(ignore_mask.shape[0], 19, 13, 13).permute(0, 2, 3, 1)
+        gt_ignore_mask = ignore_mask.repeat(15, 1, 1).view(ignore_mask.shape[0], 15, 13, 13).permute(0, 2, 3, 1)
         video_mask = torch.from_numpy(np.array(video_mask)).float().cuda()
         gt_video_mask = video_mask.permute(0, 2, 3, 1)
         # for binary_entropy / with out B X W X H X Class
@@ -146,17 +140,8 @@ class First_Third_Net(nn.Module):
         #     return self.bbox_predict, [output, pred_conf, pred_boxes]
 
 
-class egoPoseClassification(nn.Module):
-    def __init__(self, num_features_in, num_anchors=9, num_classes=80, prior=0.01, feature_size=256):
-        super(egoPoseClassification, self).__init__()
-        self.ego_pool = nn.AvgPool2d(13)
-        self.fc = nn.Linear(255, 19)
-        self.fc = nn.DataParallel(self.fc)
-        F.interpolate(num_features_in, scale_factor=2, mode="nearest")
-
-
 class egoFirstBranchModel(nn.Module):
-    def __init__(self, num_features_in, num_classes=19, prior=0.01, feature_size=256):
+    def __init__(self, num_features_in, num_classes=5, prior=0.01, feature_size=256):
         super(egoFirstBranchModel, self).__init__()
         self.feature_size = feature_size
         self.num_classes = num_classes
@@ -205,7 +190,7 @@ class egoFirstBranchModel(nn.Module):
 
 
 class exoSecondBranchModel(nn.Module):
-    def __init__(self, num_features_in, num_classes=19, prior=0.01, feature_size=256):
+    def __init__(self, num_features_in, num_classes=15, prior=0.01, feature_size=256):
         super(exoSecondBranchModel, self).__init__()
 
         self.num_classes = num_classes
@@ -250,7 +235,7 @@ class exoSecondBranchModel(nn.Module):
 
 
 class ThirdBranchModel(nn.Module):
-    def __init__(self, num_features_in, num_classes=19, prior=0.01, feature_size=256):
+    def __init__(self, num_features_in, num_classes=15, prior=0.01, feature_size=256):
         super(ThirdBranchModel, self).__init__()
 
         self.num_classes = num_classes
