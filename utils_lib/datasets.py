@@ -193,6 +193,9 @@ class load_images_and_labels():  # for training
                     assert ("Cannot find the scene image in " + scene_path)
                     continue
 
+
+            # Whiole image enter points here
+            # Input "img == ego", "scene_img == ego", "self.per_video_mask == 13 x 13",  "self.per_video_ignore_mask == 13 x 13"
             pick_mask = True
             if pick_mask:
                 video_tag = img_path.split(img_path.split('-')[-1])[0].split('/')[-1].split('first')[0]

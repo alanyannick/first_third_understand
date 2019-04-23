@@ -52,8 +52,10 @@ class First_Third_Net(nn.Module):
                 for param in subnet.parameters():
                     if param.dim() >= 4:
                         nn.init.xavier_uniform_(param)
-        # Loss definition
-        self.ce_loss= nn.CrossEntropyLoss()
+        # Loss definition: Adds the pre-defined class weights
+        weights = [0.2375, 0.475, 0.475, 0.6333333333333333]
+        class_weights = torch.FloatTensor(weights).cuda()
+        self.ce_loss= nn.CrossEntropyLoss(weight=weights)
         self.bce_loss = nn.BCELoss(size_average=True)
 
     def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, ignore_mask = None, video_mask = None, test_mode = False):
