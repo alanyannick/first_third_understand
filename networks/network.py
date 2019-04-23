@@ -55,7 +55,7 @@ class First_Third_Net(nn.Module):
         # Loss definition: Adds the pre-defined class weights
         weights = [0.2375, 0.475, 0.475, 0.6333333333333333]
         class_weights = torch.FloatTensor(weights).cuda()
-        self.ce_loss= nn.CrossEntropyLoss(weight=weights)
+        self.ce_loss= nn.CrossEntropyLoss(weight=class_weights)
         self.bce_loss = nn.BCELoss(size_average=True)
 
     def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, ignore_mask = None, video_mask = None, test_mode = False):
