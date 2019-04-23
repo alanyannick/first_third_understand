@@ -79,7 +79,7 @@ def sv_augmentation(img, scene_img, scene_gt_img, fraction):
 
 
 class load_images_and_labels():  # for training
-    def __init__(self, path, batch_size=1, img_size=608, multi_scale=False, augment=False, shuffle_switch=True):
+    def __init__(self, path, batch_size=1, img_size=608, multi_scale=False, augment=False, shuffle_switch=True, test_mode= False):
         self.path = path
         # self.img_files = sorted(glob.glob('%s/*.*' % path))
         with open(path, 'r') as file:
@@ -128,14 +128,25 @@ class load_images_and_labels():  # for training
 
         # Pick mask
         affordance_flag = True
+        test_mode = test_mode
         if affordance_flag:
-            with open('/home/yangmingwen/first_third_person/per_video_gt_files/per_video_gt.pickle', 'rb') as gt_handle:
-                gt_per_video_mask = pickle.load(gt_handle)
-                self.gt_video_mask = gt_per_video_mask
-            with open('/home/yangmingwen/first_third_person/per_video_gt_files/ignore_mask.pickle',
-                      'rb') as ignore_handle:
-                ignore_per_video_mask = pickle.load(ignore_handle)
-                self.ignore_video_mask = ignore_per_video_mask
+            if test_mode:
+                with open('/home/yangmingwen/first_third_person/merged_clusters/per_video_gt_merged_test.pickle', 'rb') as gt_handle:
+                    gt_per_video_mask = pickle.load(gt_handle)
+                    self.gt_video_mask = gt_per_video_mask
+                with open('/home/yangmingwen/first_third_person/merged_clusters/ignore_mask_merged_test.pickle',
+                          'rb') as ignore_handle:
+                    ignore_per_video_mask = pickle.load(ignore_handle)
+                    self.ignore_video_mask = ignore_per_video_mask
+            else:
+                with open('/home/yangmingwen/first_third_person/merged_clusters/per_video_gt_merged.pickle', 'rb') as gt_handle:
+                    gt_per_video_mask = pickle.load(gt_handle)
+                    self.gt_video_mask = gt_per_video_mask
+                with open('/home/yangmingwen/first_third_person/merged_clusters/ignore_mask_merged.pickle',
+                          'rb') as ignore_handle:
+                    ignore_per_video_mask = pickle.load(ignore_handle)
+                    self.ignore_video_mask = ignore_per_video_mask
+
 
     def __iter__(self):
         self.count = -1
@@ -185,8 +196,14 @@ class load_images_and_labels():  # for training
             pick_mask = True
             if pick_mask:
                 video_tag = img_path.split(img_path.split('-')[-1])[0].split('/')[-1].split('first')[0]
-                self.per_video_mask = self.gt_video_mask[video_tag]
-                self.per_video_ignore_mask = self.ignore_video_mask[video_tag]
+                try:
+                    self.per_video_mask = self.gt_video_mask[video_tag]
+                    self.per_video_ignore_mask = self.ignore_video_mask[video_tag]
+                except:
+                    print('Test_Mode: Do not care about the gt_video_mask')
+                    video_tag = '0EU2AEGO_1_'
+                    self.per_video_mask = self.gt_video_mask[video_tag]
+                    self.per_video_ignore_mask = self.ignore_video_mask[video_tag]
 
             if img is None:
                 continue

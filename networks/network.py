@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from maskrcnn_benchmark.modeling.detector import build_detection_model
 from maskrcnn_benchmark.config import cfg
-
+import numpy as np
 
 class First_Third_Net(nn.Module):
     def __init__(self):
@@ -29,16 +29,19 @@ class First_Third_Net(nn.Module):
         # self.rgb.detach()
 
         # First branch
-        self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=19)
+        self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=4)
 
         # Second Branch
-        self.second_exo_affordance_branch = exoSecondBranchModel(256, num_classes=19)
+        self.second_exo_affordance_branch = exoSecondBranchModel(256, num_classes=15)
+
+        # Third Branch
+        # self.third_affordance_branch = ThirdBranchModel(256, num_classes=19)
 
         # class branch
-        self.classifier = ClassificationModel(256, num_classes=19)
+        # self.classifier = ClassificationModel(256, num_classes=19)
 
         # Regression branch
-        self.regressor = RegressionModel(256)
+        # self.regressor = RegressionModel(256)
 
         # Compress the final channel
         # self.fc_ego_pool = nn.MaxPool2d(2,2)
@@ -82,21 +85,23 @@ class First_Third_Net(nn.Module):
         # ====================== First Branch: ego pose
         # for cross_entropy / with out B X 1 X Class
         ego_pose_out = self.first_ego_pose_branch(retina_ego_features[3])
-        import numpy as np
-        if np.array(self.cls_targets).max() == 20:
-            print('something wrong happened on target classes, which above the 19')
-        if np.array(self.cls_targets).max() == 19:
-            print('something wrong happened on target classes, which above the 18')
-        # prediction = torch.argmax(first_ego_out, -1)
+
+        # Sigmoid the possiblity
+        # Sigmoid = torch.nn.Sigmoid()
+        # ego_pose_out = Sigmoid(ego_pose_out)
+
         # ====================== Second Branch: exo affordance
         # get the mask_tensor here
         ignore_mask = torch.from_numpy(np.array(ignore_mask)).float().cuda()
-        gt_ignore_mask = ignore_mask.repeat(19, 1, 1).view(ignore_mask.shape[0], 19, 13, 13).permute(0, 2, 3, 1)
+        gt_ignore_mask = ignore_mask.repeat(15, 1, 1).view(ignore_mask.shape[0], 15, 13, 13).permute(0, 2, 3, 1)
         video_mask = torch.from_numpy(np.array(video_mask)).float().cuda()
         gt_video_mask = video_mask.permute(0, 2, 3, 1)
-
         # for binary_entropy / with out B X W X H X Class
         exo_affordance_out = self.second_exo_affordance_branch(retina_exo_features[3])
+
+        # ====================== Third Branch: ego & exo affordance
+        # selected_mask = exo_affordance_out * ego_pose_out
+        # final_out_feature = torch.cat((retina_exo_features, retina_ego_features), dim=1)
 
         if not test_mode:
             # Loss
@@ -106,10 +111,13 @@ class First_Third_Net(nn.Module):
             pose_loss = self.ce_loss(ego_pose_out, torch.LongTensor(self.cls_targets).cuda())
             # print('targets:')
             # print(self.cls_targets)
-            affordance_loss = self.bce_loss(exo_affordance_out[gt_video_mask ==1], gt_video_mask[gt_video_mask == 1]) + \
-                              self.bce_loss(exo_affordance_out[(gt_ignore_mask - gt_video_mask) == 1], gt_video_mask[(gt_ignore_mask - gt_video_mask) == 1]).cuda()
+            affordance_loss = self.bce_loss(exo_affordance_out[gt_video_mask == 1], gt_video_mask[gt_video_mask == 1]) + \
+            self.bce_loss(exo_affordance_out[gt_video_mask == 0], gt_video_mask[gt_video_mask == 0])
+            # self.bce_loss(exo_affordance_out[(gt_ignore_mask - gt_video_mask) == 1], gt_video_mask[(gt_ignore_mask - gt_video_mask) == 1]).cuda()
 
-            final_loss = pose_loss + affordance_loss
+            final_loss = pose_loss  + affordance_loss
+            # final_loss = pose_loss # + affordance_loss
+            # final_loss = affordance_loss
             self.losses['pose_loss'] = pose_loss
             self.losses['affordance_loss'] = affordance_loss
             return final_loss
@@ -134,17 +142,8 @@ class First_Third_Net(nn.Module):
         #     return self.bbox_predict, [output, pred_conf, pred_boxes]
 
 
-class egoPoseClassification(nn.Module):
-    def __init__(self, num_features_in, num_anchors=9, num_classes=80, prior=0.01, feature_size=256):
-        super(egoPoseClassification, self).__init__()
-        self.ego_pool = nn.AvgPool2d(13)
-        self.fc = nn.Linear(255, 19)
-        self.fc = nn.DataParallel(self.fc)
-        F.interpolate(num_features_in, scale_factor=2, mode="nearest")
-
-
 class egoFirstBranchModel(nn.Module):
-    def __init__(self, num_features_in, num_classes=19, prior=0.01, feature_size=256):
+    def __init__(self, num_features_in, num_classes=4, prior=0.01, feature_size=256):
         super(egoFirstBranchModel, self).__init__()
         self.feature_size = feature_size
         self.num_classes = num_classes
@@ -193,7 +192,7 @@ class egoFirstBranchModel(nn.Module):
 
 
 class exoSecondBranchModel(nn.Module):
-    def __init__(self, num_features_in, num_classes=19, prior=0.01, feature_size=256):
+    def __init__(self, num_features_in, num_classes=15, prior=0.01, feature_size=256):
         super(exoSecondBranchModel, self).__init__()
 
         self.num_classes = num_classes
@@ -236,6 +235,50 @@ class exoSecondBranchModel(nn.Module):
         out2 = out1.view(batch_size, width, height, self.num_classes)
         return out2
 
+
+class ThirdBranchModel(nn.Module):
+    def __init__(self, num_features_in, num_classes=15, prior=0.01, feature_size=256):
+        super(ThirdBranchModel, self).__init__()
+
+        self.num_classes = num_classes
+        self.conv1 = nn.Conv2d(num_features_in, feature_size, kernel_size=3, padding=1)
+        self.act1 = nn.ReLU()
+
+        self.conv2 = nn.Conv2d(feature_size, feature_size, kernel_size=3, padding=1)
+        self.act2 = nn.ReLU()
+
+        self.conv3 = nn.Conv2d(feature_size, feature_size, kernel_size=3, padding=1)
+        self.act3 = nn.ReLU()
+
+        self.conv4 = nn.Conv2d(feature_size, feature_size, kernel_size=3, padding=1)
+        self.act4 = nn.ReLU()
+
+        # self.output = nn.Conv2d(feature_size, num_anchors * num_classes, kernel_size=3, padding=1)
+        self.output = nn.Conv2d(feature_size, num_classes, kernel_size=3, padding=1)
+        self.output_act = nn.Sigmoid()
+
+    def forward(self, x):
+        out = self.conv1(x)
+        out = self.act1(out)
+
+        out = self.conv2(out)
+        out = self.act2(out)
+
+        out = self.conv3(out)
+        out = self.act3(out)
+
+        out = self.conv4(out)
+        out = self.act4(out)
+
+        out = self.output(out)
+        out = self.output_act(out)
+
+        # out is B x C x W x H, with C = n_classes + n_anchors
+        out1 = out.permute(0, 2, 3, 1)
+        # transfer out to B X W X H X C
+        batch_size, width, height, channels = out1.shape
+        out2 = out1.view(batch_size, width, height, self.num_classes)
+        return out2
 
 class ClassificationModel(nn.Module):
     def __init__(self, num_features_in, num_anchors=9, num_classes=80, prior=0.01, feature_size=256):
