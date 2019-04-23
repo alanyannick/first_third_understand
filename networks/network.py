@@ -115,7 +115,9 @@ class First_Third_Net(nn.Module):
             self.bce_loss(exo_affordance_out[gt_video_mask == 0], gt_video_mask[gt_video_mask == 0])
             # self.bce_loss(exo_affordance_out[(gt_ignore_mask - gt_video_mask) == 1], gt_video_mask[(gt_ignore_mask - gt_video_mask) == 1]).cuda()
 
-            final_loss = pose_loss + affordance_loss
+            final_loss = pose_loss  + affordance_loss
+            # final_loss = pose_loss # + affordance_loss
+            # final_loss = affordance_loss
             self.losses['pose_loss'] = pose_loss
             self.losses['affordance_loss'] = affordance_loss
             return final_loss

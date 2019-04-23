@@ -2,8 +2,8 @@ import torch
 import os
 # create the reference link here
 # Input file
-label_file_path = '/home/yangmingwen/first_third_person/data_2019_3_15/train_pose_balanced_cluster_removed/darknet_targets_train.pth'
-tsv_file_path = '/home/yangmingwen/first_third_person/data_2019_3_15/train_pose_balanced_cluster_removed/meta_train.tsv'
+label_file_path = '/home/yangmingwen/first_third_person/data_2019_3_15/merge/cluster_merge_test/darknet_targets_test_level1.pth'
+tsv_file_path = '/home/yangmingwen/first_third_person/data_2019_3_15/merge/cluster_merge_test/meta_test.tsv'
 
 # Save dir
 out_file_dir = '/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/labels/'
@@ -12,7 +12,7 @@ image_file_dir = '/home/yangmingwen/first_third_person/data_2019_3_15/final-data
 scene_file_dir = '/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/scenes'
 
 # Output: 1.Get the list of images 2. Get the txt file contained GT
-list_file = open('/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/file_list_train_new.txt', 'w')
+list_file = open('/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/file_list_test_new_4_20.txt', 'w')
 
 cxcywh2xyxy = False
 
