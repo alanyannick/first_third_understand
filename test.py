@@ -140,8 +140,8 @@ def test(
                         # generate final affordance mask
                         labelmap_rgb[affordance >= each_map_threshold] = affordance[affordance >= each_map_threshold]
 
-                        # generate final gt mask
-                        labelmap_rgb_gt[video_mask_gt >= 0] = affordance[video_mask_gt >= 0]
+                        # generate gt mask
+                        labelmap_rgb_gt[video_mask_gt >= 10.0] = video_mask_gt[video_mask_gt >= 10.0]
 
 
                     # Source image ego & exo
@@ -161,6 +161,10 @@ def test(
                     # predict affordance
                     ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
                                                        name='predict_affordance_heat_map.jpg', img=heatmap_all)
+                    # Pick the channel prediction
+                    affordance = cv2.resize((pose_affordance[:, :, pose_label].cpu().float().numpy() * 255), (800, 800))
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                       name='pick_label_prediction.jpg', img=affordance)
 
                     # Get the gt_affordance
                     labelmap_rgb_gt = cv2.applyColorMap(np.uint8(labelmap_rgb_gt)
@@ -168,14 +172,9 @@ def test(
                     ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
                                                        name='gt_affordance_heat_map.jpg', img=labelmap_rgb_gt)
 
-                    # Pick the channel prediction
-                    affordance = cv2.resize((pose_affordance[:, :, pose_label].cpu().float().numpy() * 255), (800, 800))
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='pick_label_prediction.jpg', img=affordance)
-
                     # Pick the channel groundtruth
                     ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='pose_gt_' + str(int(gt_pose_label)) + '.jpg')
+                                                       name='pose_' + str(int(gt_pose_label)) + '_gt.jpg')
                     html.add_images(ims, txts, links)
                     html.save()
                     ims = []
@@ -245,11 +244,11 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weight_retina_04_22_Pose_Affordance/backup2.pt', help='path to weights file')
+    parser.add_argument('--weights', type=str, default='weight_retina_04_24_Pose_Affordance/backup2.pt', help='path to weights file')
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
-    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/pose_affordance_out_422/', help='cfg file path')
+    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/pose_affordance_out_424_test/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
     parser.add_argument('--testing_data_mode', type=bool, default=True, help='using testing or training data')
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='path to model config file')
