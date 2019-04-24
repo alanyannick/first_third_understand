@@ -26,13 +26,11 @@ def test(
         out,
         batch_size=16,
         img_size=416,
-        iou_thres=0.5,
-        conf_thres=0.3,
-        nms_thres=0.45,
-        n_cpus=0,
+        n_cpus=4,
         gpu_choice = "0",
         worker ='first',
         shuffle_switch = False,
+        testing_data = True,
 
 ):
 
@@ -48,8 +46,11 @@ def test(
 
     # Configure run
     data_config = parse_data_config(data_config_path)
-    nC = int(data_config['classes'])  # number of classes (80 for COCO)
-    test_path = data_config['valid']
+
+    if testing_data == True:
+        test_path = data_config['valid']
+    else:
+        test_path = data_config['train']
 
     # Initiate model
     if worker == 'detection':
@@ -66,10 +67,8 @@ def test(
     model.cuda().eval()
 
     # Get dataloader
-    # dataset = load_images_with_labels(test_path)
-    # dataloader = torch.utils_lib.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=n_cpus)
     dataloader = load_images_and_labels(test_path, batch_size=batch_size,
-                                        img_size=img_size, augment=False, shuffle_switch=shuffle_switch, test_mode=True)
+                                        img_size=img_size, augment=False, shuffle_switch=shuffle_switch, test_mode=testing_data)
 
     print('%11s' * 5 % ('Image', 'Total', 'P', 'R', 'mAP'))
     scene_flag = True
@@ -102,17 +101,12 @@ def test(
                         print('Hit')
 
                     pose_affordance = pose_affordance.squeeze(0)
-
                     labelmap_rgb = np.zeros((800, 800),
                                             dtype=np.float16)
-
-
                     labelmap_rgb_gt = np.zeros((800, 800),
                                             dtype=np.float16)
 
                     each_map_threshold = 40
-
-                    # folder = 'out_4_23_pose_train_test_data_epoch2_weight_balance'
 
                     out_image_folder = os.path.join(out_folder, 'images/')
 
@@ -121,12 +115,13 @@ def test(
                         affordance = cv2.resize((pose_affordance[:, :, i].cpu().float().numpy() * 255), (800,800))
                         # ground truth for affordance
                         video_mask_gt = cv2.resize((video_mask[0][i,:,:] * 255.0), (800,800))
-                        # insert it to html
+
+                        # insert pose_prediction and gt to html
                         ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
                                                            name='pose_predict'+str(i)+'.jpg',
                                                            img=affordance)
                         ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                           name='pose_gt_'+str(i)+'.jpg',
+                                                           name='pose_' + str(i) + '_gt.jpg',
                                                            img=video_mask_gt)
                         # insert the prediction_all
                         heatmap = cv2.applyColorMap(np.uint8(affordance)
@@ -142,12 +137,17 @@ def test(
                         labelmap_rgb_gt[video_mask_gt >= 0] = affordance[video_mask_gt >= 0]
 
 
-                    # Source image
+                    # Source image ego & exo
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                       name='input_image_ego.jpg',
+                                                       img=np.transpose((imgs[0]+128).cpu().float().numpy(), (1,2,0)))
                     ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
                                                        name='input_image'
                                     + '_gt_label' + str(gt_pose_label) + '_predict_label' + str(predict_pose_label) +'.jpg',
                                                        img=np.transpose((scenes_gt[0]+128).cpu().float().numpy(), (1,2,0)))
 
+
+                    # heatmap prediction
                     heatmap_all = cv2.applyColorMap(np.uint8(labelmap_rgb)
                                                     , cv2.COLORMAP_JET)
 
@@ -239,14 +239,12 @@ if __name__ == '__main__':
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
     parser.add_argument('--weights', type=str, default='weight_retina_04_22_Pose_Affordance/backup2.pt', help='path to weights file')
-    parser.add_argument('--iou-thres', type=float, default=0.2, help='iou threshold required to qualify as detected')
-    parser.add_argument('--conf-thres', type=float, default=0.2, help='object confidence    threshold')
-    parser.add_argument('--nms-thres', type=float, default=0.2, help='iou threshold for non-maximum suppression')
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
     parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/pose_affordance_out_422/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
+    parser.add_argument('--testing_data_mode', type=bool, default=False, help='using testing or training data')
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='path to model config file')
     opt = parser.parse_args()
     print(opt, end='\n\n')
@@ -259,9 +257,7 @@ if __name__ == '__main__':
         opt.weights,
         batch_size=opt.batch_size,
         img_size=opt.img_size,
-        iou_thres=opt.iou_thres,
-        conf_thres=opt.conf_thres,
-        nms_thres=opt.nms_thres,
         n_cpus=opt.n_cpus,
         out=opt.out,
+        testing_data=opt.testing_data_mode,
     )
