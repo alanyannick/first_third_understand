@@ -11,7 +11,8 @@ from networks import *
 import networks
 
 def html_append_img(ims, txts, links, batch_i, i, out_img_folder, name='_exo.png', img=None):
-    cv2.imwrite(os.path.join(out_img_folder, 'images_' + str(batch_i) + name), img)
+    if img is not None:
+        cv2.imwrite(os.path.join(out_img_folder, 'images_' + str(batch_i) + name), img)
     ims.append('images_' + str(batch_i) + name)
     txts.append('images_' + str(batch_i) + name + '<tr>')
     links.append('images_' + str(batch_i) + name)
@@ -166,10 +167,11 @@ def test(
                     labelmap_rgb_gt = cv2.applyColorMap(np.uint8(labelmap_rgb_gt)
                                                     , cv2.COLORMAP_JET)
                     cv2.imwrite(out_image_folder + '/batch_' + str(
-                        batch_i) + 'affordance_heat_map', labelmap_rgb_gt)
+                        batch_i) + 'affordance_heat_map.jpg', labelmap_rgb_gt)
                     ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='affordance_heat_map', img=labelmap_rgb_gt)
+                                                       name='affordance_heat_map.jpg', img=labelmap_rgb_gt)
 
+                    # Pick the channel prediction
                     affordance = cv2.resize((pose_affordance[:, :, pose_label].cpu().float().numpy() * 255), (800, 800))
                     cv2.imwrite(
                         out_image_folder + '/batch_' + str(batch_i) + 'pick_label_heat_map_predictio.jpg', affordance)
@@ -177,6 +179,9 @@ def test(
                     ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
                                                        name='pick_label_heat_map_prediction.jpg', img=affordance)
 
+                    # Pick the channel groundtruth
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                       name='pose_gt_' + str(int(gt_pose_label)) + '.jpg')
                     html.add_images(ims, txts, links)
                     html.save()
                     ims = []
