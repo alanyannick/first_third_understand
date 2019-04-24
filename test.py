@@ -119,25 +119,20 @@ def test(
                     for i in range(0, pose_affordance.shape[2]):
                         # predict for affordance
                         affordance = cv2.resize((pose_affordance[:, :, i].cpu().float().numpy() * 255), (800,800))
-                        cv2.imwrite(out_image_folder + str(batch_i)+'pose'+str(i)+'.jpg',
-                                    affordance)
                         # ground truth for affordance
                         video_mask_gt = cv2.resize((video_mask[0][i,:,:] * 255.0), (800,800))
-                        cv2.imwrite(out_image_folder + str(batch_i)+'pose_gt_'+str(i)+'.jpg', video_mask_gt)
                         # insert it to html
                         ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                           name='pose'+str(i)+'.jpg',
+                                                           name='pose_predict'+str(i)+'.jpg',
                                                            img=affordance)
                         ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
                                                            name='pose_gt_'+str(i)+'.jpg',
                                                            img=video_mask_gt)
-
+                        # insert the prediction_all
                         heatmap = cv2.applyColorMap(np.uint8(affordance)
                                                     , cv2.COLORMAP_JET)
-                        cv2.imwrite(out_image_folder + '/batch_'+str(batch_i) +'pose_heat_map' + str(i) + '.jpg', heatmap)
-
                         ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                           name='pose_heat_map'+str(i)+'.jpg',
+                                                           name='predict_pose_heat_map'+str(i)+'.jpg',
                                                            img=heatmap)
 
                         # generate final affordance mask
@@ -147,37 +142,29 @@ def test(
                         labelmap_rgb_gt[video_mask_gt >= 0] = affordance[video_mask_gt >= 0]
 
 
-                    cv2.imwrite(out_image_folder +str(batch_i)+'input_image'
-                                    + '_gt_label' + str(gt_pose_label) + '_predict_label' + str(predict_pose_label) +'.jpg',
-                                np.transpose((scenes_gt[0]+128).cpu().float().numpy(), (1,2,0)))
-
+                    # Source image
                     ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
                                                        name='input_image'
                                     + '_gt_label' + str(gt_pose_label) + '_predict_label' + str(predict_pose_label) +'.jpg',
                                                        img=np.transpose((scenes_gt[0]+128).cpu().float().numpy(), (1,2,0)))
 
-
                     heatmap_all = cv2.applyColorMap(np.uint8(labelmap_rgb)
                                                     , cv2.COLORMAP_JET)
-                    cv2.imwrite(out_image_folder + '/batch_'+str(batch_i)+'predict_affordance_heat_map.jpg', heatmap_all)
+
+                    # predict affordance
                     ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
                                                        name='predict_affordance_heat_map.jpg', img=heatmap_all)
 
-
+                    # Get the gt_affordance
                     labelmap_rgb_gt = cv2.applyColorMap(np.uint8(labelmap_rgb_gt)
                                                     , cv2.COLORMAP_JET)
-                    cv2.imwrite(out_image_folder + '/batch_' + str(
-                        batch_i) + 'affordance_heat_map.jpg', labelmap_rgb_gt)
                     ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='affordance_heat_map.jpg', img=labelmap_rgb_gt)
+                                                       name='gt_affordance_heat_map.jpg', img=labelmap_rgb_gt)
 
                     # Pick the channel prediction
                     affordance = cv2.resize((pose_affordance[:, :, pose_label].cpu().float().numpy() * 255), (800, 800))
-                    cv2.imwrite(
-                        out_image_folder + '/batch_' + str(batch_i) + 'pick_label_heat_map_predictio.jpg', affordance)
-
                     ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='pick_label_heat_map_prediction.jpg', img=affordance)
+                                                       name='pick_label_prediction.jpg', img=affordance)
 
                     # Pick the channel groundtruth
                     ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
