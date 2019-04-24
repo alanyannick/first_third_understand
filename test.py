@@ -49,8 +49,12 @@ def test(
 
     if testing_data == True:
         test_path = data_config['valid']
+        pickle_video_mask = data_config['pickle_video_mask_test']
+        pickle_ignore_mask = data_config['pickle_ignore_mask_test']
     else:
         test_path = data_config['train']
+        pickle_video_mask = data_config['pickle_video_mask_train']
+        pickle_ignore_mask = data_config['pickle_ignore_mask_train']
 
     # Initiate model
     if worker == 'detection':
@@ -68,7 +72,9 @@ def test(
 
     # Get dataloader
     dataloader = load_images_and_labels(test_path, batch_size=batch_size,
-                                        img_size=img_size, augment=False, shuffle_switch=shuffle_switch, test_mode=testing_data)
+                                        img_size=img_size, augment=False, shuffle_switch=shuffle_switch,
+                                        video_mask=pickle_video_mask,
+                                        ignore_mask=pickle_ignore_mask)
 
     print('%11s' * 5 % ('Image', 'Total', 'P', 'R', 'mAP'))
     scene_flag = True
@@ -110,7 +116,8 @@ def test(
 
                     out_image_folder = os.path.join(out_folder, 'images/')
 
-                    for i in range(0, pose_affordance.shape[2]):
+                    # for i in range(0, pose_affordance.shape[2]):
+                    for i in range(0, 7):
                         # predict for affordance
                         affordance = cv2.resize((pose_affordance[:, :, i].cpu().float().numpy() * 255), (800,800))
                         # ground truth for affordance
@@ -244,7 +251,7 @@ if __name__ == '__main__':
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
     parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/pose_affordance_out_422/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
-    parser.add_argument('--testing_data_mode', type=bool, default=False, help='using testing or training data')
+    parser.add_argument('--testing_data_mode', type=bool, default=True, help='using testing or training data')
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='path to model config file')
     opt = parser.parse_args()
     print(opt, end='\n\n')

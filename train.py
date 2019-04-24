@@ -56,6 +56,8 @@ def train(
     data_config = parse_data_config(data_config_path)
     num_classes = int(data_config['classes'])
     train_path = data_config['train']
+    pickle_video_mask = data_config['pickle_video_mask_train']
+    pickle_ignore_mask = data_config['pickle_ignore_mask_train']
 
     # Initialize model
     # here, for the rgb is 416 = 32 by 13 but for the classifier is 13 by 13
@@ -69,7 +71,9 @@ def train(
 
     # Get dataloader
     dataloader = load_images_and_labels(train_path, batch_size=batch_size, img_size=img_size,
-                                        multi_scale=multi_scale, augment=False)
+                                        multi_scale=multi_scale, augment=False,
+                                        video_mask=pickle_video_mask,
+                                        ignore_mask=pickle_ignore_mask)
 
     lr0 = 0.01
     if resume:

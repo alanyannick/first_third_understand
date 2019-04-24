@@ -79,7 +79,9 @@ def sv_augmentation(img, scene_img, scene_gt_img, fraction):
 
 
 class load_images_and_labels():  # for training
-    def __init__(self, path, batch_size=1, img_size=608, multi_scale=False, augment=False, shuffle_switch=True, test_mode= False):
+    def __init__(self, path, batch_size=1, img_size=608, multi_scale=False, augment=False, shuffle_switch=True,
+                 video_mask='/home/yangmingwen/first_third_person/merged_clusters/per_video_gt_merged_train.pickle',
+                 ignore_mask='/home/yangmingwen/first_third_person/merged_clusters/ignore_mask_merged_train.pickle'):
         self.path = path
         # self.img_files = sorted(glob.glob('%s/*.*' % path))
         with open(path, 'r') as file:
@@ -128,24 +130,14 @@ class load_images_and_labels():  # for training
 
         # Pick mask
         affordance_flag = True
-        test_mode = test_mode
         if affordance_flag:
-            if test_mode:
-                with open('/home/yangmingwen/first_third_person/merged_clusters/per_video_gt_merged_test.pickle', 'rb') as gt_handle:
-                    gt_per_video_mask = pickle.load(gt_handle)
-                    self.gt_video_mask = gt_per_video_mask
-                with open('/home/yangmingwen/first_third_person/merged_clusters/ignore_mask_merged_test.pickle',
+            with open(video_mask, 'rb') as gt_handle:
+                gt_per_video_mask = pickle.load(gt_handle)
+                self.gt_video_mask = gt_per_video_mask
+            with open(ignore_mask,
                           'rb') as ignore_handle:
-                    ignore_per_video_mask = pickle.load(ignore_handle)
-                    self.ignore_video_mask = ignore_per_video_mask
-            else:
-                with open('/home/yangmingwen/first_third_person/merged_clusters/per_video_gt_merged.pickle', 'rb') as gt_handle:
-                    gt_per_video_mask = pickle.load(gt_handle)
-                    self.gt_video_mask = gt_per_video_mask
-                with open('/home/yangmingwen/first_third_person/merged_clusters/ignore_mask_merged.pickle',
-                          'rb') as ignore_handle:
-                    ignore_per_video_mask = pickle.load(ignore_handle)
-                    self.ignore_video_mask = ignore_per_video_mask
+                ignore_per_video_mask = pickle.load(ignore_handle)
+                self.ignore_video_mask = ignore_per_video_mask
 
 
     def __iter__(self):
