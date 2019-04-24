@@ -7,7 +7,7 @@ import pickle
 import cv2
 import numpy as np
 import torch
-
+import random
 import skimage.io
 import skimage.transform
 import skimage.color
@@ -121,7 +121,7 @@ class load_images_and_labels():  # for training
         self.transforms = T.Compose(
             [
                 T.ToPILImage(),
-                T.Resize((800, 800)),
+                T.Resize((985, 985)),
                 T.ToTensor(),
                 to_bgr_transform,
                 normalize_transform,
@@ -203,9 +203,26 @@ class load_images_and_labels():  # for training
             if img is None:
                 continue
 
+            # Input ego/exo/gt_exo
             img = self.transforms(img)
             scene_img = self.transforms(scene_img)
             scene_gt_img = self.transforms(scene_gt_img)
+
+            # Achieve center crop here
+            center_crop = True
+            if center_crop:
+                x_crop1 = random.randint(0, 184)
+                y_crop1 = random.randint(0, 184)
+                x_crop2 = random.randint(0, 184)
+                y_crop2 = random.randint(0, 184)
+                x_crop3= round(float(x_crop2) * 16 / 985)
+                y_crop3 = round(float(y_crop2) * 16 / 985)
+
+                img = img[:,y_crop1:y_crop1 + 800, x_crop1:x_crop1 + 800]
+                scene_img = scene_img[:, y_crop2:y_crop2 + 800, x_crop2:x_crop2 + 800]
+                scene_gt_img = scene_gt_img[:, y_crop2:y_crop2 + 800, x_crop2:x_crop2 + 800]
+                self.per_video_mask = self.per_video_mask[:,y_crop3:y_crop3 + 13, x_crop3:x_crop3 + 13]
+                self.per_video_ignore_mask = self.per_video_ignore_mask[y_crop3:y_crop3 + 13, x_crop3:x_crop3 + 13]
 
             # Load labels and transfer it from CxCyWH to LxLyRxRy
             if os.path.isfile(label_path):

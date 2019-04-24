@@ -29,10 +29,10 @@ class First_Third_Net(nn.Module):
         # self.rgb.detach()
 
         # First branch
-        self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=4)
+        self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=3)
 
         # Second Branch
-        self.second_exo_affordance_branch = exoSecondBranchModel(256, num_classes=15)
+        self.second_exo_affordance_branch = exoSecondBranchModel(256, num_classes=7)
 
         # Third Branch
         # self.third_affordance_branch = ThirdBranchModel(256, num_classes=19)
@@ -56,7 +56,7 @@ class First_Third_Net(nn.Module):
         with_weight_balance = True
         if with_weight_balance:
         # Loss definition: Adds the pre-defined class weights
-            weights = [0.2375, 0.475, 0.475, 0.6333333333333333]
+            weights = [0.375, 0.375, 1.0]
             class_weights = torch.FloatTensor(weights).cuda()
             self.ce_loss= nn.CrossEntropyLoss(weight=class_weights)
         else:
@@ -100,7 +100,7 @@ class First_Third_Net(nn.Module):
         # ====================== Second Branch: exo affordance
         # get the mask_tensor here
         ignore_mask = torch.from_numpy(np.array(ignore_mask)).float().cuda()
-        gt_ignore_mask = ignore_mask.repeat(15, 1, 1).view(ignore_mask.shape[0], 15, 13, 13).permute(0, 2, 3, 1)
+        # gt_ignore_mask = ignore_mask.repeat(15, 1, 1).view(ignore_mask.shape[0], 15, 13, 13).permute(0, 2, 3, 1)
         video_mask = torch.from_numpy(np.array(video_mask)).float().cuda()
         gt_video_mask = video_mask.permute(0, 2, 3, 1)
         # for binary_entropy / with out B X W X H X Class
@@ -122,7 +122,7 @@ class First_Third_Net(nn.Module):
             self.bce_loss(exo_affordance_out[gt_video_mask == 0], gt_video_mask[gt_video_mask == 0])
             # self.bce_loss(exo_affordance_out[(gt_ignore_mask - gt_video_mask) == 1], gt_video_mask[(gt_ignore_mask - gt_video_mask) == 1]).cuda()
 
-            final_loss = pose_loss  + affordance_loss
+            final_loss = affordance_loss
             # final_loss = pose_loss # + affordance_loss
             # final_loss = affordance_loss
             self.losses['pose_loss'] = pose_loss
