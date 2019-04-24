@@ -10,7 +10,7 @@ import visdom
 from networks import *
 import networks
 
-def html_append_img(ims, txts, links, batch_i, out_img_folder, name='_exo.png', img=None):
+def html_append_img(ims, txts, links, batch_i, i, out_img_folder, name='_exo.png', img=None):
     cv2.imwrite(os.path.join(out_img_folder, 'images_' + str(batch_i) + name), img)
     ims.append('images_' + str(batch_i) + name)
     txts.append('images_' + str(batch_i) + name + '<tr>')
@@ -67,20 +67,20 @@ def test(
     # Get dataloader
     # dataset = load_images_with_labels(test_path)
     # dataloader = torch.utils_lib.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=n_cpus)
-    dataloader = load_images_and_labels(test_path, batch_size=batch_size, img_size=img_size, augment=False, shuffle_switch=shuffle_switch, test_mode=True)
+    dataloader = load_images_and_labels(test_path, batch_size=batch_size,
+                                        img_size=img_size, augment=False, shuffle_switch=shuffle_switch, test_mode=True)
 
-    mean_mAP, mean_R, mean_P = 0.0, 0.0, 0.0
     print('%11s' * 5 % ('Image', 'Total', 'P', 'R', 'mAP'))
-    outputs, mAPs, mR, mP, TP, confidence, pred_class, target_class = [], [], [], [], [], [], [], []
-    AP_accum, AP_accum_count = np.zeros(nC), np.zeros(nC)
     scene_flag = True
     ims = []
     txts = []
     links = []
+    # create final folder
     out_folder = os.path.join(out_path, 'web8/')
+    mkdir(out_folder)
     html = HTML(out_folder, 'final_out_html')
     html.add_header('First_Third_Person_Understanding')
-    pose_accuracy = 0
+
     total_count = 0
     pose_correct_count = 0
     if scene_flag:
@@ -111,24 +111,33 @@ def test(
 
                     each_map_threshold = 40
 
-                    folder = 'out_4_22_pose_train_test_data_epoch14'
+                    # folder = 'out_4_23_pose_train_test_data_epoch2_weight_balance'
+
+                    out_image_folder = os.path.join(out_folder, 'images/')
+
                     for i in range(0, pose_affordance.shape[2]):
                         # predict for affordance
                         affordance = cv2.resize((pose_affordance[:, :, i].cpu().float().numpy() * 255), (800,800))
-                        cv2.imwrite('/home/yangmingwen/first_third_person/first_third_result/' + folder + '/batch_'+str(batch_i)+'pose'+str(i)+'.jpg',
+                        cv2.imwrite(out_image_folder + str(batch_i)+'pose'+str(i)+'.jpg',
                                     affordance)
                         # ground truth for affordance
                         video_mask_gt = cv2.resize((video_mask[0][i,:,:] * 255.0), (800,800))
-                        cv2.imwrite('/home/yangmingwen/first_third_person/first_third_result/' + folder + '/batch_'+str(batch_i)+'pose_gt_'+str(i)+'.jpg',
-                                    video_mask_gt)
-                        # scenes_tmp = np.transpose((scenes_gt[0] + 128).cpu().float().numpy(), (1, 2, 0))
-                        cv2.imwrite('/home/yangmingwen/first_third_person/first_third_result/' + folder + '/batch_'+str(batch_i)+'pose' + str(20)
-                                    + '_gt_label' + str(gt_pose_label) + '_predict_label' + str(predict_pose_label) +'.jpg',
-                        np.transpose((scenes_gt[0]+128).cpu().float().numpy(), (1,2,0)))
+                        cv2.imwrite(out_image_folder + str(batch_i)+'pose_gt_'+str(i)+'.jpg', video_mask_gt)
+                        # insert it to html
+                        ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                           name='pose'+str(i)+'.jpg',
+                                                           img=affordance)
+                        ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                           name='pose_gt_'+str(i)+'.jpg',
+                                                           img=video_mask_gt)
 
                         heatmap = cv2.applyColorMap(np.uint8(affordance)
                                                     , cv2.COLORMAP_JET)
-                        cv2.imwrite('/home/yangmingwen/first_third_person/first_third_result/' + folder + '/batch_'+str(batch_i)+'pose_heat_map' + str(i) + '.jpg', heatmap)
+                        cv2.imwrite(out_image_folder + '/batch_'+str(batch_i) +'pose_heat_map' + str(i) + '.jpg', heatmap)
+
+                        ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                           name='pose_heat_map'+str(i)+'.jpg',
+                                                           img=heatmap)
 
                         # generate final affordance mask
                         labelmap_rgb[affordance >= each_map_threshold] = affordance[affordance >= each_map_threshold]
@@ -136,20 +145,43 @@ def test(
                         # generate final gt mask
                         labelmap_rgb_gt[video_mask_gt >= 0] = affordance[video_mask_gt >= 0]
 
-                    affordance = cv2.resize((pose_affordance[:, :, pose_label].cpu().float().numpy() * 255), (800, 800))
-                    cv2.imwrite(
-                        '/home/yangmingwen/first_third_person/first_third_result/' + folder + '/batch_' + str(batch_i) + 'pose' + str(
-                            19) + '.jpg', affordance)
+
+                    cv2.imwrite(out_image_folder +str(batch_i)+'input_image'
+                                    + '_gt_label' + str(gt_pose_label) + '_predict_label' + str(predict_pose_label) +'.jpg',
+                                np.transpose((scenes_gt[0]+128).cpu().float().numpy(), (1,2,0)))
+
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                       name='input_image'
+                                    + '_gt_label' + str(gt_pose_label) + '_predict_label' + str(predict_pose_label) +'.jpg',
+                                                       img=np.transpose((scenes_gt[0]+128).cpu().float().numpy(), (1,2,0)))
 
 
                     heatmap_all = cv2.applyColorMap(np.uint8(labelmap_rgb)
                                                     , cv2.COLORMAP_JET)
-                    cv2.imwrite('/home/yangmingwen/first_third_person/first_third_result/' + folder + '/batch_'+str(batch_i)+'pose_heat_map' + '.jpg', heatmap_all)
+                    cv2.imwrite(out_image_folder + '/batch_'+str(batch_i)+'predict_affordance_heat_map.jpg', heatmap_all)
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                       name='predict_affordance_heat_map.jpg', img=heatmap_all)
+
 
                     labelmap_rgb_gt = cv2.applyColorMap(np.uint8(labelmap_rgb_gt)
                                                     , cv2.COLORMAP_JET)
-                    cv2.imwrite('/home/yangmingwen/first_third_person/first_third_result/' + folder + '/batch_' + str(
-                        batch_i) + 'pose_heat_map_gt' + '.jpg', labelmap_rgb_gt)
+                    cv2.imwrite(out_image_folder + '/batch_' + str(
+                        batch_i) + 'affordance_heat_map', labelmap_rgb_gt)
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                       name='affordance_heat_map', img=labelmap_rgb_gt)
+
+                    affordance = cv2.resize((pose_affordance[:, :, pose_label].cpu().float().numpy() * 255), (800, 800))
+                    cv2.imwrite(
+                        out_image_folder + '/batch_' + str(batch_i) + 'pick_label_heat_map_predictio.jpg', affordance)
+
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                       name='pick_label_heat_map_prediction.jpg', img=affordance)
+
+                    html.add_images(ims, txts, links)
+                    html.save()
+                    ims = []
+                    txts = []
+                    links = []
 
                 # cv2.imwrite('/home/yangmingwen/first_third_person/pose' + str(300) + '.jpg',
                 # cv2.cvtColor(affordance, cv2.COLOR_GRAY2RGB)* scenes_tmp + scenes_tmp)
@@ -206,145 +238,7 @@ def test(
                     links = []
 
         print('Final Pose accuracy:' + str(pose_correct_count / total_count))
-    #             output = non_max_suppression(output, conf_thres=conf_thres, nms_thres=nms_thres)
-    #
-    #         # Compute average precision for each sample
-    #         for sample_i, (labels, detections) in enumerate(zip(targets, output)):
-    #             correct = []
-    #
-    #             if detections is None:
-    #                 # If there are no detections but there are labels mask as zero AP
-    #                 if labels.size(0) != 0:
-    #                     mAPs.append(0), mR.append(0), mP.append(0)
-    #                 continue
-    #
-    #             # Get detections sorted by decreasing confidence scores
-    #             detections = detections.cpu().numpy()
-    #             detections = detections[np.argsort(-detections[:, 4])]
-    #
-    #             # If no labels add number of detections as incorrect
-    #             if labels.size(0) == 0:
-    #                 # correct.extend([0 for _ in range(len(detections))])
-    #                 mAPs.append(0), mR.append(0), mP.append(0)
-    #                 continue
-    #             else:
-    #                 target_cls = labels[:, 0]
-    #
-    #                 # Extract target boxes as (x1, y1, x2, y2)
-    #                 target_boxes = xywh2xyxy(labels[:, 1:5]) * img_size
-    #
-    #                 detected = []
-    #                 for *pred_bbox, conf, obj_conf, obj_pred in detections:
-    #
-    #                     pred_bbox = torch.FloatTensor(pred_bbox).view(1, -1)
-    #                     # Compute iou with target boxes
-    #                     iou = bbox_iou(pred_bbox, target_boxes)
-    #                     # Extract index of largest overlap
-    #                     best_i = np.argmax(iou)
-    #                     # If overlap exceeds threshold and classification is correct mark as correct
-    #                     if iou[best_i] > iou_thres and obj_pred == labels[best_i, 0] and best_i not in detected:
-    #                         correct.append(1)
-    #                         detected.append(best_i)
-    #                     else:
-    #                         correct.append(0)
-    #
-    #             # Compute Average Precision (AP) per class
-    #             AP, AP_class, R, P = ap_per_class(tp=correct, conf=detections[:, 4], pred_cls=detections[:, 6],
-    #
-                # target_cls=target_cls)
-    #
-    #             # Accumulate AP per class
-    #             AP_accum_count += np.bincount(AP_class, minlength=nC)
-    #             AP_accum += np.bincount(AP_class, minlength=nC, weights=AP)
-    #
-    #             # Compute mean AP across all classes in this image, and append to image list
-    #             mAPs.append(AP.mean())
-    #             mR.append(R.mean())
-    #             mP.append(P.mean())
-    #
-    #             # Means of all images
-    #             mean_mAP = np.mean(mAPs)
-    #             mean_R = np.mean(mR)
-    #             mean_P = np.mean(mP)
-    #
-    #             # Print image mAP and running mean mAP
-    #             print(('%11s%11s' + '%11.3g' * 3) % (len(mAPs), dataloader.nF, mean_P, mean_R, mean_mAP))
-    # else:
-    #     for batch_i, (imgs, targets) in enumerate(dataloader):
-    #         with torch.no_grad():
-    #             output = model(imgs.cuda())
-    #             output = non_max_suppression(output, conf_thres=conf_thres, nms_thres=nms_thres)
-    #
-    #         # Compute average precision for each sample
-    #         for sample_i, (labels, detections) in enumerate(zip(targets, output)):
-    #             correct = []
-    #
-    #             if detections is None:
-    #                 # If there are no detections but there are labels mask as zero AP
-    #                 if labels.size(0) != 0:
-    #                     mAPs.append(0), mR.append(0), mP.append(0)
-    #                 continue
-    #
-    #             # Get detections sorted by decreasing confidence scores
-    #             detections = detections.cpu().numpy()
-    #             detections = detections[np.argsort(-detections[:, 4])]
-    #
-    #             # If no labels add number of detections as incorrect
-    #             if labels.size(0) == 0:
-    #                 # correct.extend([0 for _ in range(len(detections))])
-    #                 mAPs.append(0), mR.append(0), mP.append(0)
-    #                 continue
-    #             else:
-    #                 target_cls = labels[:, 0]
-    #
-    #                 # Extract target boxes as (x1, y1, x2, y2)
-    #                 target_boxes = xywh2xyxy(labels[:, 1:5]) * img_size
-    #
-    #                 detected = []
-    #                 for *pred_bbox, conf, obj_conf, obj_pred in detections:
-    #
-    #                     pred_bbox = torch.FloatTensor(pred_bbox).view(1, -1)
-    #                     # Compute iou with target boxes
-    #                     iou = bbox_iou(pred_bbox, target_boxes)
-    #                     # Extract index of largest overlap
-    #                     best_i = np.argmax(iou)
-    #                     # If overlap exceeds threshold and classification is correct mark as correct
-    #                     if iou[best_i] > iou_thres and obj_pred == labels[best_i, 0] and best_i not in detected:
-    #                         correct.append(1)
-    #                         detected.append(best_i)
-    #                     else:
-    #                         correct.append(0)
-    #
-    #             # Compute Average Precision (AP) per class
-    #             AP, AP_class, R, P = ap_per_class(tp=correct, conf=detections[:, 4], pred_cls=detections[:, 6],
-    #                                               target_cls=target_cls)
-    #
-    #             # Accumulate AP per class
-    #             AP_accum_count += np.bincount(AP_class, minlength=nC)
-    #             AP_accum += np.bincount(AP_class, minlength=nC, weights=AP)
-    #
-    #             # Compute mean AP across all classes in this image, and append to image list
-    #             mAPs.append(AP.mean())
-    #             mR.append(R.mean())
-    #             mP.append(P.mean())
-    #
-    #             # Means of all images
-    #             mean_mAP = np.mean(mAPs)
-    #             mean_R = np.mean(mR)
-    #             mean_P = np.mean(mP)
-    #
-    #             # Print image mAP and running mean mAP
-    #             print(('%11s%11s' + '%11.3g' * 3) % (len(mAPs), dataloader.nF, mean_P, mean_R, mean_mAP))
-    #
-    # # Print mAP per class
-    # print('%11s' * 5 % ('Image', 'Total', 'P', 'R', 'mAP') + '\n\nmAP Per Class:')
-    #
-    # classes = load_classes(data_config['names'])  # Extracts class labels from file
-    # for i, c in enumerate(classes):
-    #     print('%15s: %-.4f' % (c, AP_accum[i] / AP_accum_count[i]))
-    #
-    # # Return mAP
-    # return mean_mAP, mean_R, mean_P
+
 
 
 if __name__ == '__main__':
@@ -352,14 +246,14 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weight_retina_04_20_Pose_Affordance/backup14.pt', help='path to weights file')
+    parser.add_argument('--weights', type=str, default='weight_retina_04_22_Pose_Affordance/backup2.pt', help='path to weights file')
     parser.add_argument('--iou-thres', type=float, default=0.2, help='iou threshold required to qualify as detected')
     parser.add_argument('--conf-thres', type=float, default=0.2, help='object confidence    threshold')
     parser.add_argument('--nms-thres', type=float, default=0.2, help='iou threshold for non-maximum suppression')
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
-    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/affordance_out/', help='cfg file path')
+    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/pose_affordance_out_422/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='path to model config file')
     opt = parser.parse_args()
