@@ -167,20 +167,6 @@ def train(
             loss = model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask)
             loss.backward()
 
-            # loc_preds, cls_preds = model(imgs.to(device))
-            # visualize
-            # invTrans = transforms.Compose([transforms.Normalize(mean=[0., 0., 0.],
-            #                                                     std=[1 / 1, 1 / 1, 1 / 1]),
-            #                                transforms.Normalize(mean=[102.9801, 115.9465, 122.7717],
-            #                                                     std=[1., 1., 1.]),
-            #                                ])
-            # permute = [2, 1, 0]
-            # vis.image(invTrans(model.exo_rgb[0, :, :, :][permute, :]), win="exo_rgb",
-            #           opts=dict(title="scene1_" + ' images'))
-            # vis.image(model.exo_rgb[0, :, :, :], win="exo_rgb", opts=dict(title="scene_" + ' images'))
-            # vis.image(model.ego_rgb[0, :, :, :], win="ego_rgb", opts=dict(title="input_" + ' images'))
-            # vis.image(model.exo_rgb_gt[0, :, :, :], win="exo_rgb_gt", opts=dict(title="scene_gt_" + ' images'))
-            # gt_bbox, gt_label, predict_bbox, predict_label = print_current_predict(targets, model)
             # drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
             # drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, label=predict_label, name='predict_', vis=vis)
             # drawing_heat_map(input=model.exo_rgb, prediction_all=model.classifier.prediction_all, name='heat_map_', vis=vis)

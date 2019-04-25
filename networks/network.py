@@ -28,6 +28,8 @@ class First_Third_Net(nn.Module):
         # ====================== detach the rgb gradient =========
         # self.rgb.detach()
 
+        # Third branch switch
+        self.third_branch_switch = True
         # First branch
         self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=3)
 
@@ -35,7 +37,8 @@ class First_Third_Net(nn.Module):
         self.second_exo_affordance_branch = exoSecondBranchModel(256, num_classes=7)
 
         # Third Branch
-        # self.third_affordance_branch = ThirdBranchModel(256, num_classes=19)
+        if self.third_branch_switch:
+            self.third_affordance_branch = ThirdBranchModel(512, num_classes=7)
 
         # class branch
         # self.classifier = ClassificationModel(256, num_classes=19)
@@ -62,6 +65,8 @@ class First_Third_Net(nn.Module):
         else:
             self.ce_loss = nn.CrossEntropyLoss()
         self.bce_loss = nn.BCELoss(size_average=True)
+
+        self.soft_max = torch.nn.Softmax()
 
     def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, ignore_mask = None, video_mask = None, test_mode = False):
         self.test_mode = test_mode
@@ -107,9 +112,35 @@ class First_Third_Net(nn.Module):
         exo_affordance_out = self.second_exo_affordance_branch(retina_exo_features[3])
 
         # ====================== Third Branch: ego & exo affordance
-        # selected_mask = exo_affordance_out * ego_pose_out
-        # final_out_feature = torch.cat((retina_exo_features, retina_ego_features), dim=1)
+        if self.third_branch_switch:
 
+            # Create channel_weight_mask firstly
+            channel_pick_mask = torch.zeros(self.exo_rgb.shape[0], 13, 13, 7)
+            # Softmax to get the channel-wise wright
+            ego_pose_out_softmax = self.soft_max(ego_pose_out)
+            # Ego_pose0_weight with 0, 1, 2
+            ego_pick_mask_0 = ego_pose_out_softmax[:, 0].repeat(self.exo_rgb.shape[0], 13, 13, 1)
+            ego_pick_mask_1 = ego_pose_out_softmax[:, 1].repeat(self.exo_rgb.shape[0], 13, 13, 1)
+            ego_pick_mask_2 = ego_pose_out_softmax[:, 2].repeat(self.exo_rgb.shape[0], 13, 13, 1)
+            group_map = [0, 2, 5, 6]
+            for index in group_map:
+                channel_pick_mask[:, :, :, index] = ego_pick_mask_0[:, :, :, 0]
+            group_map = [1, 3]
+            for index in group_map:
+                channel_pick_mask[:, :, :, index] = ego_pick_mask_1[:, :, :, 0]
+            group_map = [4]
+            for index in group_map:
+                channel_pick_mask[:, :, :, index] = ego_pick_mask_2[:, :, :, 0]
+            # Protect the gt label here
+            if ego_pose_out.argmax() > 2:
+                assert ("Something wrong happened on GT datasets, maybe label out of index")
+            # Get channel-wise pick mask
+            channel_pick_mask = channel_pick_mask.cuda()
+
+            # Third branch with nB x Channel(256 X 2) X 13 X 13
+            input_feature = torch.cat((retina_exo_features[3], retina_ego_features[3]), dim=1)
+            final_out_feature = self.third_affordance_branch(input_feature)
+            
         if not test_mode:
             # Loss
             # for i in range(0, len(self.cls_targets)):
@@ -244,7 +275,7 @@ class exoSecondBranchModel(nn.Module):
 
 
 class ThirdBranchModel(nn.Module):
-    def __init__(self, num_features_in, num_classes=15, prior=0.01, feature_size=256):
+    def __init__(self, num_features_in, num_classes=7, prior=0.01, feature_size=512):
         super(ThirdBranchModel, self).__init__()
 
         self.num_classes = num_classes
