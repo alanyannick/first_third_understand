@@ -89,6 +89,12 @@ def test(
 
     total_count = 0
     pose_correct_count = 0
+    corrct_class_balance = []
+    total_classes = []
+    for class_it in range(0, 3):
+        corrct_class_balance.append(0)
+        total_classes.append(0)
+
     if scene_flag:
         for batch_i, (imgs, targets, scenes, scenes_gt, ignore_mask, video_mask) in enumerate(dataloader):
             total_count += 1
@@ -102,9 +108,13 @@ def test(
                     predict_pose_label = pose_label.cpu().float().numpy()[0]
                     gt_pose_label = np.array(targets[0][0][0])
 
+                    # get the accuracy
+                    total_classes[int(gt_pose_label)] += 1
                     if predict_pose_label == gt_pose_label:
                         pose_correct_count += 1
+                        corrct_class_balance[int(predict_pose_label)] += 1
                         print('Hit')
+
 
                     pose_affordance = pose_affordance.squeeze(0)
                     labelmap_rgb = np.zeros((800, 800),
@@ -141,7 +151,7 @@ def test(
                         labelmap_rgb[affordance >= each_map_threshold] = affordance[affordance >= each_map_threshold]
 
                         # generate gt mask
-                        labelmap_rgb_gt[video_mask_gt >= 10.0] = video_mask_gt[video_mask_gt >= 10.0]
+                        labelmap_rgb_gt[video_mask_gt >= 40.0] = video_mask_gt[video_mask_gt >= 40.0]
 
 
                     # Source image ego & exo
@@ -153,6 +163,13 @@ def test(
                                     + '_gt_label' + str(gt_pose_label) + '_predict_label' + str(predict_pose_label) +'.jpg',
                                                        img=np.transpose((scenes_gt[0]+128).cpu().float().numpy(), (1,2,0)))
 
+                    # group map
+                    if gt_pose_label == 0:
+                        group_map = [0, 2, 5, 6]
+                    elif gt_pose_label == 1:
+                        group_map = [1, 3]
+                    else:
+                        group_map = [4]
 
                     # heatmap prediction
                     heatmap_all = cv2.applyColorMap(np.uint8(labelmap_rgb)
@@ -161,10 +178,12 @@ def test(
                     # predict affordance
                     ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
                                                        name='predict_affordance_heat_map.jpg', img=heatmap_all)
-                    # Pick the channel prediction
-                    affordance = cv2.resize((pose_affordance[:, :, pose_label].cpu().float().numpy() * 255), (800, 800))
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='pick_label_prediction.jpg', img=affordance)
+                    # Pick the possible channel prediction
+                    for index in group_map:
+                        affordance = cv2.resize((pose_affordance[:, :, index].cpu().float().numpy() * 255),
+                                                (800, 800))
+                        ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                           name='pick_label_prediction' + str(int(index)) + '.jpg', img=affordance)
 
                     # Get the gt_affordance
                     labelmap_rgb_gt = cv2.applyColorMap(np.uint8(labelmap_rgb_gt)
@@ -173,8 +192,10 @@ def test(
                                                        name='gt_affordance_heat_map.jpg', img=labelmap_rgb_gt)
 
                     # Pick the channel groundtruth
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='pose_' + str(int(gt_pose_label)) + '_gt.jpg')
+                    for index in group_map:
+                        ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                           name='pose_' + str(int(index)) + '_gt.jpg')
+
                     html.add_images(ims, txts, links)
                     html.save()
                     ims = []
@@ -236,6 +257,8 @@ def test(
                     links = []
 
         print('Final Pose accuracy:' + str(pose_correct_count / total_count))
+        class_balance_accuracy = np.array(corrct_class_balance) / np.array(total_classes)
+        print('Final Balance Class Pose accuracy:' + str(class_balance_accuracy.mean()))
 
 
 
