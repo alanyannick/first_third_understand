@@ -143,9 +143,11 @@ def test(
                         # insert the prediction_all
                         heatmap = cv2.applyColorMap(np.uint8(affordance)
                                                     , cv2.COLORMAP_JET)
+
+                        final_out = np.uint8(heatmap * 0.4 + np.transpose((scenes[0]+128).cpu().float().numpy(), (1,2,0)) * 0.6)
                         ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
                                                            name='predict_pose_heat_map'+str(i)+'.jpg',
-                                                           img=heatmap)
+                                                           img=final_out)
 
                         # generate final affordance mask
                         labelmap_rgb[affordance >= each_map_threshold] = affordance[affordance >= each_map_threshold]
@@ -176,8 +178,10 @@ def test(
                                                     , cv2.COLORMAP_JET)
 
                     # predict affordance
+
                     ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='predict_affordance_heat_map.jpg', img=heatmap_all)
+                                                       name='predict_affordance_heat_map.jpg',
+                                                       img=(heatmap_all*0.4 + np.transpose((scenes[0]+128).cpu().float().numpy(), (1,2,0))*0.6))
                     # Pick the possible channel prediction
                     for index in group_map:
                         affordance = cv2.resize((pose_affordance[:, :, index].cpu().float().numpy() * 255),
@@ -267,13 +271,13 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weight_retina_04_24_Pose_Affordance/backup2.pt', help='path to weights file')
+    parser.add_argument('--weights', type=str, default='weight_retina_04_24_Affordance/backup1.pt', help='path to weights file')
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
-    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/pose_affordance_out_424_test/', help='cfg file path')
+    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/affordance_out_424_train_1/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
-    parser.add_argument('--testing_data_mode', type=bool, default=True, help='using testing or training data')
+    parser.add_argument('--testing_data_mode', type=bool, default=False, help='using testing or training data')
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='path to model config file')
     opt = parser.parse_args()
     print(opt, end='\n\n')
