@@ -96,7 +96,7 @@ def test(
         total_classes.append(0)
 
     if scene_flag:
-        for batch_i, (imgs, targets, scenes, scenes_gt, ignore_mask, video_mask) in enumerate(dataloader):
+        for batch_i, (imgs, targets, scenes, scenes_gt, ignore_mask, video_mask, frame_mask) in enumerate(dataloader):
             total_count += 1
             if batch_i > 500:
                 break
@@ -104,7 +104,7 @@ def test(
                 if worker == 'detection':
                     output = model(imgs.cuda())
                 else:
-                    pose_label, pose_affordance= model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask, test_mode=True)
+                    pose_label, pose_affordance, frame_affordance= model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask, frame_mask, test_mode=True)
                     predict_pose_label = pose_label.cpu().float().numpy()[0]
                     gt_pose_label = np.array(targets[0][0][0])
 
@@ -271,11 +271,11 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weight_retina_04_24_Affordance/backup1.pt', help='path to weights file')
+    parser.add_argument('--weights', type=str, default='weight_retina_04_25_Pose_Affordance_Third/latest.pt', help='path to weights file')
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
-    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/affordance_out_424_train_1/', help='cfg file path')
+    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/affordance_out_425_train_third/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
     parser.add_argument('--testing_data_mode', type=bool, default=False, help='using testing or training data')
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='path to model config file')
