@@ -150,7 +150,7 @@ def train(
         metrics = torch.zeros(3, num_classes)
         optimizer.zero_grad()
 
-        for i, (imgs, targets, scenes, scenes_gt, ignore_mask, video_mask) in enumerate(dataloader):
+        for i, (imgs, targets, scenes, scenes_gt, ignore_mask, video_mask, frame_mask) in enumerate(dataloader):
             if sum([len(x) for x in targets]) < 1:  # if no targets continue
                 continue
 
@@ -164,7 +164,7 @@ def train(
             print('Current_lr:' + str(lr))
 
             # Compute loss, compute gradient, update parameters
-            loss = model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask)
+            loss = model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask, frame_mask)
             loss.backward()
 
             # drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
@@ -186,7 +186,10 @@ def train(
                        '%g/%g' % (i, len(dataloader) - 1),
                         'total_loss', float(loss),
                         'pose_loss:', float(model.losses['pose_loss']),
-                        'affordance_loss', float(model.losses['affordance_loss']), 'time:', time.time() - t0)
+                        'affordance_loss', float(model.losses['affordance_loss']),
+                        'mask_loss', float(model.losses['mask_loss']),
+                        'time:', time.time() - t0)
+
             t0 = time.time()
             print(s)
             # visLoss.plot_current_errors(i, 1, rloss)

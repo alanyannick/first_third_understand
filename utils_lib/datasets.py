@@ -81,7 +81,8 @@ def sv_augmentation(img, scene_img, scene_gt_img, fraction):
 class load_images_and_labels():  # for training
     def __init__(self, path, batch_size=1, img_size=608, multi_scale=False, augment=False, shuffle_switch=True,
                  video_mask='/home/yangmingwen/first_third_person/merged_clusters/per_video_gt_merged_train.pickle',
-                 ignore_mask='/home/yangmingwen/first_third_person/merged_clusters/ignore_mask_merged_train.pickle'):
+                 ignore_mask='/home/yangmingwen/first_third_person/merged_clusters/ignore_mask_merged_train.pickle',
+                 frame_mask='/home/yangmingwen/first_third_person/merged_clusters/final_branch_gt_merged.pickle'):
         self.path = path
         # self.img_files = sorted(glob.glob('%s/*.*' % path))
         with open(path, 'r') as file:
@@ -131,6 +132,11 @@ class load_images_and_labels():  # for training
         # Pick mask
         affordance_flag = True
         if affordance_flag:
+            # get the specific frame mask
+            with open(frame_mask, 'rb') as gt_handle:
+                gt_per_frame_mask = pickle.load(gt_handle)
+                self.gt_per_frame_mask = gt_per_frame_mask
+
             with open(video_mask, 'rb') as gt_handle:
                 gt_per_video_mask = pickle.load(gt_handle)
                 self.gt_video_mask = gt_per_video_mask
@@ -164,6 +170,7 @@ class load_images_and_labels():  # for training
         labels_all = []
         scene_all = []
         scene_gt_all = []
+        frame_mask = []
         ignore_mask = []
         video_mask = []
 
@@ -185,6 +192,12 @@ class load_images_and_labels():  # for training
                     assert ("Cannot find the scene image in " + scene_path)
                     continue
 
+            frame_flag = True
+            # Get the specific frame mask here
+            if frame_flag:
+                frame_tag = img_path.split('/')[-1].split('.jpg')[0]
+                per_frame_mask = self.gt_per_frame_mask[frame_tag]
+                per_frame_mask[per_frame_mask == -1] = 7
 
             # Whiole image enter points here
             # Input "img == ego", "scene_img == ego", "self.per_video_mask == 13 x 13",  "self.per_video_ignore_mask == 13 x 13"
@@ -223,6 +236,9 @@ class load_images_and_labels():  # for training
                 scene_gt_img = scene_gt_img[:, y_crop2:y_crop2 + 800, x_crop2:x_crop2 + 800]
                 self.per_video_mask = self.per_video_mask[:,y_crop3:y_crop3 + 13, x_crop3:x_crop3 + 13]
                 self.per_video_ignore_mask = self.per_video_ignore_mask[y_crop3:y_crop3 + 13, x_crop3:x_crop3 + 13]
+
+                if frame_flag:
+                    self.per_frame_mask = per_frame_mask[:, y_crop3:y_crop3 + 13, x_crop3:x_crop3 + 13]
 
             # Load labels and transfer it from CxCyWH to LxLyRxRy
             if os.path.isfile(label_path):
@@ -267,10 +283,11 @@ class load_images_and_labels():  # for training
             scene_gt_all.append(scene_gt_img)
             ignore_mask.append(self.per_video_ignore_mask)
             video_mask.append(self.per_video_mask)
+            frame_mask.append(self.per_frame_mask)
 
         # Transfer the label as contin
         labels_all = np.ascontiguousarray(labels_all, dtype=np.float32)
-        return img_all, labels_all, scene_all, scene_gt_all, ignore_mask, video_mask
+        return img_all, labels_all, scene_all, scene_gt_all, ignore_mask, video_mask, frame_mask
         #         scene_all), torch.from_numpy(scene_gt_all)
 
 
