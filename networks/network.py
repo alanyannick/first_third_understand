@@ -28,15 +28,20 @@ class First_Third_Net(nn.Module):
         # ====================== detach the rgb gradient =========
         # self.rgb.detach()
 
+        # Third branch switch
+        self.third_branch_switch = True
         # First branch
-        self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=3)
+        self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=3).cuda()
 
         # Second Branch
-        self.second_exo_affordance_branch = exoSecondBranchModel(256, num_classes=7)
+        self.second_exo_affordance_branch = exoSecondBranchModel(256, num_classes=7).cuda()
 
         # Third Branch
-        # self.third_affordance_branch = ThirdBranchModel(256, num_classes=19)
+        if self.third_branch_switch:
+            self.third_affordance_branch = ThirdBranchModel(512, num_classes=8).cuda()
 
+        # Merge Branch
+        self.merge_feature = MergeFeatureModule(256).cuda()
         # class branch
         # self.classifier = ClassificationModel(256, num_classes=19)
 
@@ -62,8 +67,13 @@ class First_Third_Net(nn.Module):
         else:
             self.ce_loss = nn.CrossEntropyLoss()
         self.bce_loss = nn.BCELoss(size_average=True)
+        self.nll_loss = nn.NLLLoss(size_average=True)
+        self.soft_max = torch.nn.Softmax()
 
-    def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, ignore_mask = None, video_mask = None, test_mode = False):
+        # self.ce2d_loss = nn.CrossEntropyLoss(size_average=True)
+        # self.log_soft_max = nn.LogSoftmax()
+
+    def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, ignore_mask = None, video_mask = None, frame_mask = None, test_mode = False):
         self.test_mode = test_mode
 
         # GroundTruth
@@ -83,15 +93,17 @@ class First_Third_Net(nn.Module):
         self.exo_rgb = torch.stack(exo_rgb)
         # ======================= get the feature pyramid here ==========
         # with torch.no_grad():
-        retina_ego_features = self.rgb(self.ego_rgb.cuda())
-        retina_exo_features = self.rgb(self.exo_rgb.cuda())
+        _, ego_feature_1, ego_feature_2, ego_feature_3, _ = self.rgb(self.ego_rgb.cuda())
+        _, exo_feature_1, exo_feature_2, exo_feature_3, _ = self.rgb(self.exo_rgb.cuda())
+
         # ======================@TBD design a feature merge module here to handle the multi-scale output of the retinaNet
-        # merge_ego_feature_model = self.merge_feature(retina_ego_features)
-        # merge_exo_feature_model = self.merge_feature(retina_exo_features)
+        # Size 1 x 256 x 13 x13
+        retina_ego_features = self.merge_feature(ego_feature_1, ego_feature_2, ego_feature_3).cuda()
+        retina_exo_features = self.merge_feature(exo_feature_1, exo_feature_2, exo_feature_3).cuda()
 
         # ====================== First Branch: ego pose
         # for cross_entropy / with out B X 1 X Class
-        ego_pose_out = self.first_ego_pose_branch(retina_ego_features[3])
+        ego_pose_out = self.first_ego_pose_branch(retina_ego_features)
 
         # Sigmoid the possiblity
         # Sigmoid = torch.nn.Sigmoid()
@@ -100,36 +112,86 @@ class First_Third_Net(nn.Module):
         # ====================== Second Branch: exo affordance
         # get the mask_tensor here
         ignore_mask = torch.from_numpy(np.array(ignore_mask)).float().cuda()
-        # gt_ignore_mask = ignore_mask.repeat(15, 1, 1).view(ignore_mask.shape[0], 15, 13, 13).permute(0, 2, 3, 1)
+        frame_mask = torch.from_numpy(np.array(frame_mask)).squeeze(1).long().cuda()#type(torch.cuda.LongTensor)
         video_mask = torch.from_numpy(np.array(video_mask)).float().cuda()
         gt_video_mask = video_mask.permute(0, 2, 3, 1)
         # for binary_entropy / with out B X W X H X Class
-        exo_affordance_out = self.second_exo_affordance_branch(retina_exo_features[3])
+        exo_affordance_out = self.second_exo_affordance_branch(retina_exo_features)
 
         # ====================== Third Branch: ego & exo affordance
-        # selected_mask = exo_affordance_out * ego_pose_out
-        # final_out_feature = torch.cat((retina_exo_features, retina_ego_features), dim=1)
+        if self.third_branch_switch:
+            pick_mask = True
+            if pick_mask:
+                # Create channel_weight_mask firstly
+                channel_pick_mask = torch.zeros(self.exo_rgb.shape[0], 13, 13, 7).cuda()
+                ego_pick_mask = torch.zeros(self.exo_rgb.shape[0], 13, 13, 3).cuda()
 
+                # Softmax to get the channel-wise wright
+                ego_pose_out_softmax = self.soft_max(ego_pose_out).cuda()
+
+                # Ego_pose0_weight with 0, 1, 2
+                for batch_index in range(0, self.exo_rgb.shape[0]):
+                    ego_pick_mask[batch_index, :, :, 0] = ego_pose_out_softmax[batch_index, 0].repeat(13, 13).cuda()
+                    ego_pick_mask[batch_index, :, :, 1] = ego_pose_out_softmax[batch_index, 1].repeat(13, 13).cuda()
+                    ego_pick_mask[batch_index, :, :, 2] = ego_pose_out_softmax[batch_index, 2].repeat(13, 13).cuda()
+
+                    # copy the group weight from 0 1 2 to 0~7 dims
+                    group_map = [0, 2, 5, 6]
+                    for index in group_map:
+                        channel_pick_mask[batch_index, :, :, index] = ego_pick_mask[batch_index, :, :, 0]
+                    group_map = [1, 3]
+                    for index in group_map:
+                        channel_pick_mask[batch_index, :, :, index] = ego_pick_mask[batch_index, :, :, 1]
+                    group_map = [4]
+                    for index in group_map:
+                        channel_pick_mask[batch_index, :, :, index] = ego_pick_mask[batch_index, :, :, 2]
+
+                # Protect the gt label here
+                if ego_pose_out.argmax() > 2:
+                    assert ("Something wrong happened on GT datasets, maybe label out of index")
+
+                # Get channel-wise pick mask
+                channel_pick_mask = channel_pick_mask.cuda()
+            else:
+                channel_pick_mask = 1
+
+            # Third branch with nB x Channel(256 X 2) X 13 X 13
+            input_feature = torch.cat((retina_exo_features.cuda(), retina_ego_features.cuda()), dim=1).cuda()
+            final_out_feature = self.third_affordance_branch(input_feature)
+
+            # Final filter feature // clamp and log to avoid log(inf) // channel 7 will be the background channel
+            final_out_feature = self.soft_max(final_out_feature.cuda())
+
+            # Create new tensor and put the value in to solve the inplace feature problem
+            final_out_feature_final = torch.zeros(final_out_feature.shape).cuda()
+            final_out_feature_final[:, :, :, :7] = torch.mul(final_out_feature[:, :, :, :7], channel_pick_mask)
+            final_out_feature_final[:, :, :, 7] = final_out_feature[:, :, :, 7]
+            # Final feature
+            final_out_feature_filter = torch.log(torch.clamp(final_out_feature_final, min=0.00001, max=0.99999))
+            
         if not test_mode:
-            # Loss
-            # for i in range(0, len(self.cls_targets)):
-            #     self.cls_targets[i] = 1
-
+            # Pose loss
             pose_loss = self.ce_loss(ego_pose_out, torch.LongTensor(self.cls_targets).cuda())
-            # print('targets:')
-            # print(self.cls_targets)
+
+            # Affordance loss
             affordance_loss = self.bce_loss(exo_affordance_out[gt_video_mask == 1], gt_video_mask[gt_video_mask == 1]) + \
             self.bce_loss(exo_affordance_out[gt_video_mask == 0], gt_video_mask[gt_video_mask == 0])
+
+            # Ignore mask loss
             # self.bce_loss(exo_affordance_out[(gt_ignore_mask - gt_video_mask) == 1], gt_video_mask[(gt_ignore_mask - gt_video_mask) == 1]).cuda()
 
-            final_loss = affordance_loss
-            # final_loss = pose_loss # + affordance_loss
-            # final_loss = affordance_loss
+            # Mask loss
+            mask_loss = self.nll_loss(final_out_feature_filter.permute(0, 3, 1, 2), frame_mask).cuda()
+
+            # Final loss
+            final_loss = pose_loss + affordance_loss + mask_loss
             self.losses['pose_loss'] = pose_loss
             self.losses['affordance_loss'] = affordance_loss
+            self.losses['mask_loss'] = mask_loss
             return final_loss
+
         else:
-            return torch.argmax(ego_pose_out, -1), exo_affordance_out
+            return torch.argmax(ego_pose_out, -1), exo_affordance_out, final_out_feature_filter
 
         # =======================First / Second  / third branch here =========================================
         # Switch for adding ss & sfn feature
@@ -244,7 +306,7 @@ class exoSecondBranchModel(nn.Module):
 
 
 class ThirdBranchModel(nn.Module):
-    def __init__(self, num_features_in, num_classes=15, prior=0.01, feature_size=256):
+    def __init__(self, num_features_in, num_classes=7, prior=0.01, feature_size=512):
         super(ThirdBranchModel, self).__init__()
 
         self.num_classes = num_classes
@@ -287,6 +349,40 @@ class ThirdBranchModel(nn.Module):
         out2 = out1.view(batch_size, width, height, self.num_classes)
         return out2
 
+
+class MergeFeatureModule(nn.Module):
+    def __init__(self, num_features_in, feature_size=256):
+        super(MergeFeatureModule, self).__init__()
+
+        self.conv1 = nn.Conv2d(num_features_in, feature_size, kernel_size=3, stride=4, padding=1)
+        self.act1 = nn.ReLU()
+
+        self.conv2 = nn.Conv2d(num_features_in, feature_size, kernel_size=3, stride=2, padding=1)
+        self.act2 = nn.ReLU()
+
+        self.conv3 = nn.Conv2d(num_features_in, feature_size, kernel_size=3, stride=1, padding=1)
+        self.act3 = nn.ReLU()
+
+        # Compress channel
+        self.conv_compress = nn.Conv2d(768, feature_size, kernel_size=1)
+
+    def forward(self, x1, x2, x3):
+        out1 = self.conv1(x1)
+        out2 = self.act1(out1)
+
+        out3 = self.conv2(x2)
+        out4 = self.act2(out3)
+
+        out5 = self.conv3(x3)
+        out6 = self.act3(out5)
+
+        out = torch.cat((out2, out4, out6), dim=1)
+
+        # B X W X H X C
+        out7 = self.conv_compress(out)
+        return out7
+
+
 class ClassificationModel(nn.Module):
     def __init__(self, num_features_in, num_anchors=9, num_classes=80, prior=0.01, feature_size=256):
         super(ClassificationModel, self).__init__()
@@ -323,7 +419,7 @@ class ClassificationModel(nn.Module):
         out = self.act4(out)
 
         out = self.output(out)
-        out = self.output_act(out)
+        # out = self.output_act(out)
 
         # out is B x C x W x H, with C = n_classes + n_anchors
         out1 = out.permute(0, 2, 3, 1)

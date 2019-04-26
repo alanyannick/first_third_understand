@@ -89,8 +89,14 @@ def test(
 
     total_count = 0
     pose_correct_count = 0
+    corrct_class_balance = []
+    total_classes = []
+    for class_it in range(0, 3):
+        corrct_class_balance.append(0)
+        total_classes.append(0)
+
     if scene_flag:
-        for batch_i, (imgs, targets, scenes, scenes_gt, ignore_mask, video_mask) in enumerate(dataloader):
+        for batch_i, (imgs, targets, scenes, scenes_gt, ignore_mask, video_mask, frame_mask) in enumerate(dataloader):
             total_count += 1
             if batch_i > 500:
                 break
@@ -98,13 +104,17 @@ def test(
                 if worker == 'detection':
                     output = model(imgs.cuda())
                 else:
-                    pose_label, pose_affordance= model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask, test_mode=True)
+                    pose_label, pose_affordance, frame_affordance= model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask, frame_mask, test_mode=True)
                     predict_pose_label = pose_label.cpu().float().numpy()[0]
                     gt_pose_label = np.array(targets[0][0][0])
 
+                    # get the accuracy
+                    total_classes[int(gt_pose_label)] += 1
                     if predict_pose_label == gt_pose_label:
                         pose_correct_count += 1
+                        corrct_class_balance[int(predict_pose_label)] += 1
                         print('Hit')
+
 
                     pose_affordance = pose_affordance.squeeze(0)
                     labelmap_rgb = np.zeros((800, 800),
@@ -133,15 +143,17 @@ def test(
                         # insert the prediction_all
                         heatmap = cv2.applyColorMap(np.uint8(affordance)
                                                     , cv2.COLORMAP_JET)
+
+                        final_out = np.uint8(heatmap * 0.4 + np.transpose((scenes[0]+128).cpu().float().numpy(), (1,2,0)) * 0.6)
                         ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
                                                            name='predict_pose_heat_map'+str(i)+'.jpg',
-                                                           img=heatmap)
+                                                           img=final_out)
 
                         # generate final affordance mask
                         labelmap_rgb[affordance >= each_map_threshold] = affordance[affordance >= each_map_threshold]
 
                         # generate gt mask
-                        labelmap_rgb_gt[video_mask_gt >= 10.0] = video_mask_gt[video_mask_gt >= 10.0]
+                        labelmap_rgb_gt[video_mask_gt >= 40.0] = video_mask_gt[video_mask_gt >= 40.0]
 
 
                     # Source image ego & exo
@@ -153,18 +165,29 @@ def test(
                                     + '_gt_label' + str(gt_pose_label) + '_predict_label' + str(predict_pose_label) +'.jpg',
                                                        img=np.transpose((scenes_gt[0]+128).cpu().float().numpy(), (1,2,0)))
 
+                    # group map
+                    if gt_pose_label == 0:
+                        group_map = [0, 2, 5, 6]
+                    elif gt_pose_label == 1:
+                        group_map = [1, 3]
+                    else:
+                        group_map = [4]
 
                     # heatmap prediction
                     heatmap_all = cv2.applyColorMap(np.uint8(labelmap_rgb)
                                                     , cv2.COLORMAP_JET)
 
                     # predict affordance
+
                     ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='predict_affordance_heat_map.jpg', img=heatmap_all)
-                    # Pick the channel prediction
-                    affordance = cv2.resize((pose_affordance[:, :, pose_label].cpu().float().numpy() * 255), (800, 800))
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='pick_label_prediction.jpg', img=affordance)
+                                                       name='predict_affordance_heat_map.jpg',
+                                                       img=(heatmap_all*0.4 + np.transpose((scenes[0]+128).cpu().float().numpy(), (1,2,0))*0.6))
+                    # Pick the possible channel prediction
+                    for index in group_map:
+                        affordance = cv2.resize((pose_affordance[:, :, index].cpu().float().numpy() * 255),
+                                                (800, 800))
+                        ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                           name='pick_label_prediction' + str(int(index)) + '.jpg', img=affordance)
 
                     # Get the gt_affordance
                     labelmap_rgb_gt = cv2.applyColorMap(np.uint8(labelmap_rgb_gt)
@@ -173,8 +196,10 @@ def test(
                                                        name='gt_affordance_heat_map.jpg', img=labelmap_rgb_gt)
 
                     # Pick the channel groundtruth
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='pose_' + str(int(gt_pose_label)) + '_gt.jpg')
+                    for index in group_map:
+                        ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                           name='pose_' + str(int(index)) + '_gt.jpg')
+
                     html.add_images(ims, txts, links)
                     html.save()
                     ims = []
@@ -236,6 +261,8 @@ def test(
                     links = []
 
         print('Final Pose accuracy:' + str(pose_correct_count / total_count))
+        class_balance_accuracy = np.array(corrct_class_balance) / np.array(total_classes)
+        print('Final Balance Class Pose accuracy:' + str(class_balance_accuracy.mean()))
 
 
 
@@ -244,13 +271,13 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weight_retina_04_24_Pose_Affordance/backup2.pt', help='path to weights file')
+    parser.add_argument('--weights', type=str, default='weight_retina_04_25_Pose_Affordance_Third/latest.pt', help='path to weights file')
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
-    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/pose_affordance_out_424_test/', help='cfg file path')
+    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/affordance_out_425_train_third/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
-    parser.add_argument('--testing_data_mode', type=bool, default=True, help='using testing or training data')
+    parser.add_argument('--testing_data_mode', type=bool, default=False, help='using testing or training data')
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='path to model config file')
     opt = parser.parse_args()
     print(opt, end='\n\n')
