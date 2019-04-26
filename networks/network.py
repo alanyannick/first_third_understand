@@ -38,7 +38,7 @@ class First_Third_Net(nn.Module):
 
         # Third Branch
         if self.third_branch_switch:
-            self.third_affordance_branch = ThirdBranchModel(512, num_classes=7)
+            self.third_affordance_branch = ThirdBranchModel(512, num_classes=8)
 
         # class branch
         # self.classifier = ClassificationModel(256, num_classes=19)
@@ -65,10 +65,13 @@ class First_Third_Net(nn.Module):
         else:
             self.ce_loss = nn.CrossEntropyLoss()
         self.bce_loss = nn.BCELoss(size_average=True)
-
+        self.nll_loss = nn.NLLLoss()
+        self.ce2d_loss = nn.CrossEntropyLoss(size_average=True)
         self.soft_max = torch.nn.Softmax()
-
-    def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, ignore_mask = None, video_mask = None, test_mode = False):
+        self.log_soft_max = nn.LogSoftmax()
+        # self.clamp = torch.clamp(min=0.00001, max=0.99999)
+        # self.log = torch.log()
+    def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, ignore_mask = None, video_mask = None, frame_mask = None, test_mode = False):
         self.test_mode = test_mode
 
         # GroundTruth
@@ -105,7 +108,7 @@ class First_Third_Net(nn.Module):
         # ====================== Second Branch: exo affordance
         # get the mask_tensor here
         ignore_mask = torch.from_numpy(np.array(ignore_mask)).float().cuda()
-        # gt_ignore_mask = ignore_mask.repeat(15, 1, 1).view(ignore_mask.shape[0], 15, 13, 13).permute(0, 2, 3, 1)
+        frame_mask = torch.from_numpy(np.array(frame_mask)).squeeze(1).long().cuda()#type(torch.cuda.LongTensor)
         video_mask = torch.from_numpy(np.array(video_mask)).float().cuda()
         gt_video_mask = video_mask.permute(0, 2, 3, 1)
         # for binary_entropy / with out B X W X H X Class
@@ -113,54 +116,65 @@ class First_Third_Net(nn.Module):
 
         # ====================== Third Branch: ego & exo affordance
         if self.third_branch_switch:
-
-            # Create channel_weight_mask firstly
-            channel_pick_mask = torch.zeros(self.exo_rgb.shape[0], 13, 13, 7)
-            # Softmax to get the channel-wise wright
-            ego_pose_out_softmax = self.soft_max(ego_pose_out)
-            # Ego_pose0_weight with 0, 1, 2
-            ego_pick_mask_0 = ego_pose_out_softmax[:, 0].repeat(self.exo_rgb.shape[0], 13, 13, 1)
-            ego_pick_mask_1 = ego_pose_out_softmax[:, 1].repeat(self.exo_rgb.shape[0], 13, 13, 1)
-            ego_pick_mask_2 = ego_pose_out_softmax[:, 2].repeat(self.exo_rgb.shape[0], 13, 13, 1)
-            group_map = [0, 2, 5, 6]
-            for index in group_map:
-                channel_pick_mask[:, :, :, index] = ego_pick_mask_0[:, :, :, 0]
-            group_map = [1, 3]
-            for index in group_map:
-                channel_pick_mask[:, :, :, index] = ego_pick_mask_1[:, :, :, 0]
-            group_map = [4]
-            for index in group_map:
-                channel_pick_mask[:, :, :, index] = ego_pick_mask_2[:, :, :, 0]
-            # Protect the gt label here
-            if ego_pose_out.argmax() > 2:
-                assert ("Something wrong happened on GT datasets, maybe label out of index")
-            # Get channel-wise pick mask
-            channel_pick_mask = channel_pick_mask.cuda()
+            pick_mask = True
+            if pick_mask:
+                # Create channel_weight_mask firstly
+                channel_pick_mask = torch.zeros(self.exo_rgb.shape[0], 13, 13, 7).cuda()
+                # Softmax to get the channel-wise wright
+                ego_pose_out_softmax = self.soft_max(ego_pose_out).cuda()
+                # Ego_pose0_weight with 0, 1, 2
+                ego_pick_mask_0 = ego_pose_out_softmax[:, 0].repeat(self.exo_rgb.shape[0], 13, 13, 1).cuda()
+                ego_pick_mask_1 = ego_pose_out_softmax[:, 1].repeat(self.exo_rgb.shape[0], 13, 13, 1).cuda()
+                ego_pick_mask_2 = ego_pose_out_softmax[:, 2].repeat(self.exo_rgb.shape[0], 13, 13, 1).cuda()
+                group_map = [0, 2, 5, 6]
+                for index in group_map:
+                    channel_pick_mask[:, :, :, index] = ego_pick_mask_0[:, :, :, 0]
+                group_map = [1, 3]
+                for index in group_map:
+                    channel_pick_mask[:, :, :, index] = ego_pick_mask_1[:, :, :, 0]
+                group_map = [4]
+                for index in group_map:
+                    channel_pick_mask[:, :, :, index] = ego_pick_mask_2[:, :, :, 0]
+                # Protect the gt label here
+                if ego_pose_out.argmax() > 2:
+                    assert ("Something wrong happened on GT datasets, maybe label out of index")
+                # Get channel-wise pick mask
+                channel_pick_mask = channel_pick_mask.cuda()
+            else:
+                channel_pick_mask = 1
 
             # Third branch with nB x Channel(256 X 2) X 13 X 13
-            input_feature = torch.cat((retina_exo_features[3], retina_ego_features[3]), dim=1)
+            input_feature = torch.cat((retina_exo_features[3].cuda(), retina_ego_features[3].cuda()), dim=1).cuda()
             final_out_feature = self.third_affordance_branch(input_feature)
+
+            # Final filter feature // clamp and log to avoid log(inf) // channel 7 will be the background channel 
+            final_out_feature = self.soft_max(final_out_feature.cuda())
+            final_out_feature[:, :, :, :7] = final_out_feature[:, :, :, :7] * channel_pick_mask
+            final_out_feature_filter = torch.log(torch.clamp(final_out_feature), min=0.00001, max=0.99999).permute(0,3,1,2)
             
         if not test_mode:
-            # Loss
-            # for i in range(0, len(self.cls_targets)):
-            #     self.cls_targets[i] = 1
-
+            # Pose loss
             pose_loss = self.ce_loss(ego_pose_out, torch.LongTensor(self.cls_targets).cuda())
-            # print('targets:')
-            # print(self.cls_targets)
+
+            # Affordance loss
             affordance_loss = self.bce_loss(exo_affordance_out[gt_video_mask == 1], gt_video_mask[gt_video_mask == 1]) + \
             self.bce_loss(exo_affordance_out[gt_video_mask == 0], gt_video_mask[gt_video_mask == 0])
+
+            # Ignore mask loss
             # self.bce_loss(exo_affordance_out[(gt_ignore_mask - gt_video_mask) == 1], gt_video_mask[(gt_ignore_mask - gt_video_mask) == 1]).cuda()
 
-            final_loss = affordance_loss
-            # final_loss = pose_loss # + affordance_loss
-            # final_loss = affordance_loss
+            # Mask loss
+            mask_loss = self.nll_loss(final_out_feature_filter, frame_mask)
+
+            # Final loss
+            final_loss = pose_loss + affordance_loss + mask_loss
             self.losses['pose_loss'] = pose_loss
             self.losses['affordance_loss'] = affordance_loss
+            self.losses['mask_loss'] = mask_loss
             return final_loss
+
         else:
-            return torch.argmax(ego_pose_out, -1), exo_affordance_out
+            return torch.argmax(ego_pose_out, -1), exo_affordance_out, final_out_feature_filter
 
         # =======================First / Second  / third branch here =========================================
         # Switch for adding ss & sfn feature
@@ -354,7 +368,7 @@ class ClassificationModel(nn.Module):
         out = self.act4(out)
 
         out = self.output(out)
-        out = self.output_act(out)
+        # out = self.output_act(out)
 
         # out is B x C x W x H, with C = n_classes + n_anchors
         out1 = out.permute(0, 2, 3, 1)
