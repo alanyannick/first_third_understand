@@ -7,6 +7,7 @@ from utils_lib.util import *
 from networks.network import First_Third_Net
 from utils_lib import torch_utils
 import visdom
+from scipy.io import loadmat
 from networks import *
 import networks
 
@@ -108,6 +109,15 @@ def test(
                     predict_pose_label = pose_label.cpu().float().numpy()[0]
                     gt_pose_label = np.array(targets[0][0][0])
 
+                    sem_frame_affordance_mask = cv2.resize(torch.argmax(frame_affordance, dim=3).cpu().float().numpy()[0], (800, 800)) + 24
+                    gt_sem_frame_affordance_mask = cv2.resize(frame_mask[0][0], (800, 800)) + 24
+
+                    colors = loadmat('data/color150.mat')['colors']
+                    # colors[7] = np.array([0, 0, 0])
+                    sem_frame_mask = colorEncode(sem_frame_affordance_mask, colors)
+                    colors = loadmat('data/color150.mat')['colors']
+                    gt_frame_mask = colorEncode(gt_sem_frame_affordance_mask, colors)
+
                     # get the accuracy
                     total_classes[int(gt_pose_label)] += 1
                     if predict_pose_label == gt_pose_label:
@@ -173,6 +183,7 @@ def test(
                     else:
                         group_map = [4]
 
+
                     # heatmap prediction
                     heatmap_all = cv2.applyColorMap(np.uint8(labelmap_rgb)
                                                     , cv2.COLORMAP_JET)
@@ -199,6 +210,26 @@ def test(
                     for index in group_map:
                         ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
                                                            name='pose_' + str(int(index)) + '_gt.jpg')
+
+                    # Mask prediction
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                       name='predict_frame_mask_map.jpg',
+                                                       img=(sem_frame_mask))
+
+                    frame_heat_affordance = frame_affordance.clone()
+                    soft_max_func = nn.Softmax(dim=3)
+                    sem_frame_affordance = cv2.resize(
+                        torch.max(soft_max_func(frame_heat_affordance), dim=3)[0].cpu().float().numpy()[0], (800, 800))
+                    sem_heatmap = cv2.applyColorMap(np.uint8(sem_frame_affordance * 255)
+                                                , cv2.COLORMAP_JET)
+
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                       name='predict_frame_mask_map_intensity.jpg',
+                                                       img=(sem_heatmap))
+                    # Mask gt
+                    # ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                    #                                    name='gt_frame_mask_map.jpg',
+                    #                                    img=(gt_frame_mask))
 
                     html.add_images(ims, txts, links)
                     html.save()
@@ -275,9 +306,9 @@ if __name__ == '__main__':
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
-    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/affordance_out_425_train_third/', help='cfg file path')
+    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/affordance_out_425_train_third_test_overfit_2/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
-    parser.add_argument('--testing_data_mode', type=bool, default=False, help='using testing or training data')
+    parser.add_argument('--testing_data_mode', type=bool, default=True, help='using testing or training data')
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='path to model config file')
     opt = parser.parse_args()
     print(opt, end='\n\n')

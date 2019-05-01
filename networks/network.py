@@ -166,8 +166,7 @@ class First_Third_Net(nn.Module):
             final_out_feature_final = torch.zeros(final_out_feature.shape).cuda()
             final_out_feature_final[:, :, :, :7] = torch.mul(final_out_feature[:, :, :, :7], channel_pick_mask)
             final_out_feature_final[:, :, :, 7] = final_out_feature[:, :, :, 7]
-            # Final feature
-            final_out_feature_filter = torch.log(torch.clamp(final_out_feature_final, min=0.00001, max=0.99999))
+
             
         if not test_mode:
             # Pose loss
@@ -181,6 +180,8 @@ class First_Third_Net(nn.Module):
             # self.bce_loss(exo_affordance_out[(gt_ignore_mask - gt_video_mask) == 1], gt_video_mask[(gt_ignore_mask - gt_video_mask) == 1]).cuda()
 
             # Mask loss
+            # Final feature
+            final_out_feature_filter = torch.log(torch.clamp(final_out_feature_final, min=0.00001, max=0.99999))
             mask_loss = self.nll_loss(final_out_feature_filter.permute(0, 3, 1, 2), frame_mask).cuda()
 
             # Final loss
@@ -191,7 +192,7 @@ class First_Third_Net(nn.Module):
             return final_loss
 
         else:
-            return torch.argmax(ego_pose_out, -1), exo_affordance_out, final_out_feature_filter
+            return torch.argmax(ego_pose_out, -1), exo_affordance_out, final_out_feature_final
 
         # =======================First / Second  / third branch here =========================================
         # Switch for adding ss & sfn feature
