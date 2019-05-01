@@ -80,6 +80,7 @@ def sv_augmentation(img, scene_img, scene_gt_img, fraction):
 
 class load_images_and_labels():  # for training
     def __init__(self, path, batch_size=1, img_size=608, multi_scale=False, augment=False, shuffle_switch=True,
+                 center_crop=False,
                  video_mask='/home/yangmingwen/first_third_person/merged_clusters/per_video_gt_merged_train.pickle',
                  ignore_mask='/home/yangmingwen/first_third_person/merged_clusters/ignore_mask_merged_train.pickle',
                  frame_mask='/home/yangmingwen/first_third_person/merged_clusters/final_branch_gt_merged.pickle'):
@@ -99,7 +100,7 @@ class load_images_and_labels():  # for training
         self.multi_scale = multi_scale
         self.augment = augment
         self.shuffle_switch = shuffle_switch
-
+        self.center_crop = center_crop
         assert self.nB > 0, 'No images found in path %s' % path
 
         # RGB normalization values
@@ -119,15 +120,29 @@ class load_images_and_labels():  # for training
         normalize_transform = T.Normalize(
             mean=self.PIXEL_MEAN, std=self.PIXEL_STD
         )
-        self.transforms = T.Compose(
-            [
-                T.ToPILImage(),
-                T.Resize((985, 985)),
-                T.ToTensor(),
-                to_bgr_transform,
-                normalize_transform,
-            ]
-        )
+
+        if self.center_crop:
+            self.transforms = T.Compose(
+                [
+                    T.ToPILImage(),
+                    T.Resize((985, 985)),
+                    # T.Resize((800, 800)),
+                    T.ToTensor(),
+                    to_bgr_transform,
+                    normalize_transform,
+                ]
+            )
+        else:
+            self.transforms = T.Compose(
+                [
+                    T.ToPILImage(),
+                    # T.Resize((985, 985)),
+                    T.Resize((800, 800)),
+                    T.ToTensor(),
+                    to_bgr_transform,
+                    normalize_transform,
+                ]
+            )
 
         # Pick mask
         affordance_flag = True
@@ -195,9 +210,15 @@ class load_images_and_labels():  # for training
             frame_flag = True
             # Get the specific frame mask here
             if frame_flag:
-                frame_tag = img_path.split('/')[-1].split('.jpg')[0]
-                per_frame_mask = self.gt_per_frame_mask[frame_tag]
-                per_frame_mask[per_frame_mask == -1] = 7
+                try:
+                    frame_tag = img_path.split('/')[-1].split('.jpg')[0]
+                    per_frame_mask = self.gt_per_frame_mask[frame_tag]
+                    per_frame_mask[per_frame_mask == -1] = 7
+                except:
+                    print('Dont care during training')
+                    frame_tag = 'bwd-ZGWMEEGO_1_first-00560'
+                    per_frame_mask = self.gt_per_frame_mask[frame_tag]
+                    per_frame_mask[per_frame_mask == -1] = 7
 
             # Whiole image enter points here
             # Input "img == ego", "scene_img == ego", "self.per_video_mask == 13 x 13",  "self.per_video_ignore_mask == 13 x 13"
@@ -222,8 +243,8 @@ class load_images_and_labels():  # for training
             scene_gt_img = self.transforms(scene_gt_img)
 
             # Achieve center crop here
-            center_crop = True
-            if center_crop:
+            # center_crop = False
+            if self.center_crop:
                 x_crop1 = random.randint(0, 184)
                 y_crop1 = random.randint(0, 184)
                 x_crop2 = random.randint(0, 184)
@@ -239,6 +260,10 @@ class load_images_and_labels():  # for training
 
                 if frame_flag:
                     self.per_frame_mask = per_frame_mask[:, y_crop3:y_crop3 + 13, x_crop3:x_crop3 + 13]
+            else:
+                if frame_flag:
+                    self.per_frame_mask = cv2.resize(per_frame_mask, (13, 13))
+                    self.per_video_ignore_mask = cv2.resize(self.per_video_ignore_mask,(13, 13))
 
             # Load labels and transfer it from CxCyWH to LxLyRxRy
             if os.path.isfile(label_path):
