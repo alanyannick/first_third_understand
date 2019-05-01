@@ -32,6 +32,7 @@ def test(
         worker ='first',
         shuffle_switch = False,
         testing_data = True,
+        center_crop = False,
 
 ):
 
@@ -74,8 +75,10 @@ def test(
     # Get dataloader
     dataloader = load_images_and_labels(test_path, batch_size=batch_size,
                                         img_size=img_size, augment=False, shuffle_switch=shuffle_switch,
+                                        center_crop=center_crop,
                                         video_mask=pickle_video_mask,
-                                        ignore_mask=pickle_ignore_mask)
+                                        ignore_mask=pickle_ignore_mask
+                                        )
 
     print('%11s' * 5 % ('Image', 'Total', 'P', 'R', 'mAP'))
     scene_flag = True
@@ -219,17 +222,18 @@ def test(
                     frame_heat_affordance = frame_affordance.clone()
                     soft_max_func = nn.Softmax(dim=3)
                     sem_frame_affordance = cv2.resize(
-                        torch.max(soft_max_func(frame_heat_affordance), dim=3)[0].cpu().float().numpy()[0], (800, 800))
+                        torch.max(frame_heat_affordance/(frame_heat_affordance.max()), dim=3)[0].cpu().float().numpy()[0], (800, 800))
                     sem_heatmap = cv2.applyColorMap(np.uint8(sem_frame_affordance * 255)
                                                 , cv2.COLORMAP_JET)
+                    sem_heatmap_final = np.uint8(sem_heatmap * 0.3 + np.transpose((scenes[0] + 128).cpu().float().numpy(), (1, 2, 0)) * 0.6)
 
                     ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
                                                        name='predict_frame_mask_map_intensity.jpg',
-                                                       img=(sem_heatmap))
+                                                       img=(sem_heatmap_final))
                     # Mask gt
-                    # ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                    #                                    name='gt_frame_mask_map.jpg',
-                    #                                    img=(gt_frame_mask))
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                       name='gt_frame_mask_map.jpg',
+                                                       img=(gt_frame_mask))
 
                     html.add_images(ims, txts, links)
                     html.save()
@@ -302,13 +306,14 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weight_retina_04_25_Pose_Affordance_Third/latest.pt', help='path to weights file')
+    parser.add_argument('--weights', type=str, default='weight_retina_04_30_Pose_Affordance_Third/latest.pt', help='path to weights file')
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
-    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/affordance_out_425_train_third_test_overfit_2/', help='cfg file path')
+    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/affordance_out_430_train_third_train/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
-    parser.add_argument('--testing_data_mode', type=bool, default=True, help='using testing or training data')
+    parser.add_argument('--testing_data_mode', type=bool, default=False, help='using testing or training data')
+    parser.add_argument('--center_crop', type=bool, default=True, help='using testing or training data')
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='path to model config file')
     opt = parser.parse_args()
     print(opt, end='\n\n')
@@ -324,4 +329,5 @@ if __name__ == '__main__':
         n_cpus=opt.n_cpus,
         out=opt.out,
         testing_data=opt.testing_data_mode,
+        center_crop=opt.center_crop,
     )
