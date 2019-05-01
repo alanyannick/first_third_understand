@@ -69,6 +69,7 @@ class First_Third_Net(nn.Module):
         self.bce_loss = nn.BCELoss(size_average=True)
         self.nll_loss = nn.NLLLoss(size_average=True)
         self.soft_max = torch.nn.Softmax()
+
         if with_weight_balance:
             weights_mask = [0.0009942434210526317, 0.0018601973684210526, 0.0009368832236842105, 0.0018332648026315789,
                         0.0018505345394736843, 0.0009594983552631579, 0.0009467516447368421,
@@ -111,6 +112,11 @@ class First_Third_Net(nn.Module):
 
         # ====================== First Branch: ego pose
         # for cross_entropy / with out B X 1 X Class
+
+        # Detach pose branch for avoiding influence
+        detach_ego = True
+        if detach_ego:
+            retina_ego_features = retina_ego_features.detach()
         ego_pose_out = self.first_ego_pose_branch(retina_ego_features)
 
         # Sigmoid the possiblity
