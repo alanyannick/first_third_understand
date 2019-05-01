@@ -621,6 +621,20 @@ def drawing_heat_map(input, prediction_all, vis, name, tmp_it=0):
     vis.image(heat_map[0, :, :, :], win=name, opts=dict(title=name + ' images'))
     return heat_map
 
+
+def colorEncode(labelmap, colors):
+    labelmap = labelmap.astype('int')
+    labelmap_rgb = np.zeros((labelmap.shape[0], labelmap.shape[1], 3),
+                            dtype=np.uint8)
+    for label in unique(labelmap):
+        if label < 0:
+            continue
+        labelmap_rgb += (labelmap == label)[:, :, np.newaxis] * \
+            np.tile(colors[label],
+                    (labelmap.shape[0], labelmap.shape[1], 1))
+    return labelmap_rgb
+
+
 class VisuaLoss():
     def __init__(self, visdom):
         print('Init visuall loss line')
