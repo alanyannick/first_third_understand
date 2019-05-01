@@ -71,7 +71,7 @@ def train(
 
     # Get dataloader
     dataloader = load_images_and_labels(train_path, batch_size=batch_size, img_size=img_size,
-                                        multi_scale=multi_scale, augment=False,
+                                        multi_scale=multi_scale, augment=False, center_crop=True,
                                         video_mask=pickle_video_mask,
                                         ignore_mask=pickle_ignore_mask)
 
@@ -113,7 +113,6 @@ def train(
 
     model_info(model)
     t0 = time.time()
-    mean_recall, mean_precision = 0, 0
     from utils_lib.utils import VisuaLoss
     visLoss = VisuaLoss(vis)
 
@@ -127,10 +126,12 @@ def train(
         # scheduler.step()
         # Update scheduler (manual)  at 0, 54, 61 epochs to 1e-3, 1e-4, 1e-5
 
-        if epoch > 3:
+        if epoch > 1:
             lr = lr0 / 10
+            mask_loss_switch = True
         else:
             lr = lr0
+            mask_loss_switch = False
         for g in optimizer.param_groups:
             g['lr'] = lr
 
@@ -164,7 +165,7 @@ def train(
             print('Current_lr:' + str(lr))
 
             # Compute loss, compute gradient, update parameters
-            loss = model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask, frame_mask)
+            loss = model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask, frame_mask, mask_loss_switch=mask_loss_switch)
             loss.backward()
 
             # drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
@@ -208,7 +209,7 @@ def train(
                     latest_weights_file,
                     backup_file_path,
                 ))
-
+                print('Save Model Backup')
                 # @TODO: Real Time Test Script
                 # Calculate mAP
                 # mAP, R, P = test.test(
@@ -223,12 +224,13 @@ def train(
                 # Write epoch results
                 # with open('results.txt', 'a') as file:
                 #     file.write(s + '%11.3g' * 3 % (mAP, P, R) + '\n')
-            if i % 3000:
+            if i % 800 == 0:
                 # Save latest checkpoint
                 checkpoint = {'epoch': i,
                               'best_loss': best_loss,
                               'model': model.state_dict(),
                               'optimizer': optimizer.state_dict()}
+                print('Save Model_latest')
                 torch.save(checkpoint, latest_weights_file)
 
         # Save latest checkpoint
@@ -237,6 +239,7 @@ def train(
                       'model': model.state_dict(),
                       'optimizer': optimizer.state_dict()}
         torch.save(checkpoint, best_weights_file)
+        print('Save Model Best')
 
 
 if __name__ == '__main__':

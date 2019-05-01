@@ -63,17 +63,25 @@ class First_Third_Net(nn.Module):
         # Loss definition: Adds the pre-defined class weights
             weights = [0.375, 0.375, 1.0]
             class_weights = torch.FloatTensor(weights).cuda()
-            self.ce_loss= nn.CrossEntropyLoss(weight=class_weights)
+            self.ce_loss= nn.CrossEntropyLoss(weight=class_weights, size_average=True)
         else:
             self.ce_loss = nn.CrossEntropyLoss()
         self.bce_loss = nn.BCELoss(size_average=True)
         self.nll_loss = nn.NLLLoss(size_average=True)
         self.soft_max = torch.nn.Softmax()
+        if with_weight_balance:
+            weights_mask = [0.0009942434210526317, 0.0018601973684210526, 0.0009368832236842105, 0.0018332648026315789,
+                        0.0018505345394736843, 0.0009594983552631579, 0.0009467516447368421,
+                       0.9906186266447369]
+            mask_weights = torch.FloatTensor(weights_mask).cuda()
+            self.ce2d_loss= nn.CrossEntropyLoss(weight=mask_weights)
 
-        # self.ce2d_loss = nn.CrossEntropyLoss(size_average=True)
-        # self.log_soft_max = nn.LogSoftmax()
+        else:
+            self.ce2d_loss = nn.CrossEntropyLoss(size_average=True)
+        self.log_soft_max = nn.LogSoftmax()
 
-    def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, ignore_mask = None, video_mask = None, frame_mask = None, test_mode = False):
+    def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, ignore_mask = None, video_mask = None, frame_mask = None, test_mode = False,
+                mask_loss_switch = False):
         self.test_mode = test_mode
 
         # GroundTruth
@@ -160,7 +168,8 @@ class First_Third_Net(nn.Module):
             final_out_feature = self.third_affordance_branch(input_feature)
 
             # Final filter feature // clamp and log to avoid log(inf) // channel 7 will be the background channel
-            final_out_feature = self.soft_max(final_out_feature.cuda())
+            # final_out_feature = self.soft_max(final_out_feature.cuda())
+            final_out_feature = final_out_feature.cuda()
 
             # Create new tensor and put the value in to solve the inplace feature problem
             final_out_feature_final = torch.zeros(final_out_feature.shape).cuda()
@@ -181,11 +190,14 @@ class First_Third_Net(nn.Module):
 
             # Mask loss
             # Final feature
-            final_out_feature_filter = torch.log(torch.clamp(final_out_feature_final, min=0.00001, max=0.99999))
-            mask_loss = self.nll_loss(final_out_feature_filter.permute(0, 3, 1, 2), frame_mask).cuda()
+            # final_out_feature_filter = torch.log(torch.clamp(final_out_feature_final, min=0.00001, max=0.99999))
+            mask_loss = self.ce2d_loss(final_out_feature_final.permute(0, 3, 1, 2), frame_mask).cuda()
 
             # Final loss
-            final_loss = pose_loss + affordance_loss + mask_loss
+            if mask_loss_switch:
+                final_loss = pose_loss + affordance_loss + mask_loss
+            else:
+                final_loss = pose_loss + affordance_loss
             self.losses['pose_loss'] = pose_loss
             self.losses['affordance_loss'] = affordance_loss
             self.losses['mask_loss'] = mask_loss
