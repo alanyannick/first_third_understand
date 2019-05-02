@@ -71,9 +71,9 @@ class First_Third_Net(nn.Module):
         self.soft_max = torch.nn.Softmax()
 
         if with_weight_balance:
-            weights_mask = [0.0009942434210526317, 0.0018601973684210526, 0.0009368832236842105, 0.0018332648026315789,
-                        0.0018505345394736843, 0.0009594983552631579, 0.0009467516447368421,
-                       0.9906186266447369]
+            weights_mask = [1/0.0009942434210526317 / 1000,1/0.0018601973684210526 / 1000, 1/0.0009368832236842105 /1000,
+                            1/0.0018332648026315789 /1000, 1/0.0018505345394736843 /1000, 1/0.0009594983552631579 /1000, 1/0.0009467516447368421/ 1000,
+                       1/0.9906186266447369/1000]
             mask_weights = torch.FloatTensor(weights_mask).cuda()
             self.ce2d_loss= nn.CrossEntropyLoss(weight=mask_weights)
 
@@ -114,7 +114,7 @@ class First_Third_Net(nn.Module):
         # for cross_entropy / with out B X 1 X Class
 
         # Detach pose branch for avoiding influence
-        detach_ego = True
+        detach_ego = False
         if detach_ego:
             retina_ego_features = retina_ego_features.detach()
         ego_pose_out = self.first_ego_pose_branch(retina_ego_features)
