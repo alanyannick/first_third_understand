@@ -114,8 +114,14 @@ def test(
                     predict_pose_label = pose_label.cpu().float().numpy()[0]
                     gt_pose_label = np.array(targets[0][0][0])
 
-                    sem_frame_affordance_mask = cv2.resize(torch.argmax(frame_affordance, dim=3).cpu().float().numpy()[0], (800, 800)) + 24
-                    gt_sem_frame_affordance_mask = cv2.resize(frame_mask[0][0], (800, 800)) + 24
+                    # Bilinear version
+                    sem_frame_affordance_mask = torch.argmax(F.interpolate(frame_affordance.permute(0, 3, 1, 2), size=(800, 800), mode='bilinear').
+                                                             permute(0, 2, 3, 1), dim=3).cpu().float().numpy()[0] + 24
+                    # Masaic verison
+                    # sem_frame_affordance_mask = cv2.resize(
+                    #     torch.argmax(frame_affordance, dim=3).cpu().float().numpy()[0], (800, 800), interpolation=cv2.INTER_NEAREST) + 24
+
+                    gt_sem_frame_affordance_mask = cv2.resize(frame_mask[0][0], (800, 800), interpolation=cv2.INTER_NEAREST) + 24
 
                     colors = loadmat('data/color150.mat')['colors']
                     # colors[7] = np.array([0, 0, 0])
@@ -146,7 +152,7 @@ def test(
                         # predict for affordance
                         affordance = cv2.resize((pose_affordance[:, :, i].cpu().float().numpy() * 255), (800,800))
                         # ground truth for affordance
-                        video_mask_gt = cv2.resize((video_mask[0][i,:,:] * 255.0), (800,800))
+                        video_mask_gt = cv2.resize((video_mask[0][i,:,:] * 255.0), (800,800), interpolation=cv2.INTER_NEAREST)
 
                         # insert pose_prediction and gt to html
                         # ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
