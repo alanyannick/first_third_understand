@@ -467,6 +467,21 @@ def drawing_bbox_gt(input, bbox, label, name, vis):
 
     return bbox_img_with_keypoint
 
+def drawing_bbox_keypoint_gt(input, bbox, label):
+    """
+    input tensor(1,1,1,1), np.bbox(1,1,1,1)
+    """
+    # transfer from rgb 2 bgr, tensor 2 numpy
+    # input_back = tensor2im(input)
+    image_bbox = np.clip(np.transpose((input[0] + 128).cpu().float().numpy(), (1, 2, 0)), 0, 255)
+    # transfer to uint 8 and asconyiguous @Yangming important here
+    image_bbox = np.ascontiguousarray(image_bbox, dtype=np.uint8)
+    # Draw the box
+    bbox_img = draw_bounding_box(image_bbox, bbox)
+    # Draw the bbox with keypoints
+    bbox_img_with_keypoint = visual_keypoint(image=bbox_img, bbox=bbox, cluster_number=label)
+    return bbox_img_with_keypoint
+
 
 def load_cluster_center_data(cluster_file):
     return joblib.load(cluster_file)
@@ -561,7 +576,7 @@ def draw_keypoints(p_color, image, bbox, keypoints, thickness=2):
     return part_line
 
 
-def draw_limbs(image, part_line, l_pair, line_color, thickness=1):
+def draw_limbs(image, part_line, l_pair, line_color, thickness=30):
     '''using the keypoints info on top'''
     for i, (start_p, end_p) in enumerate(l_pair):
         if start_p in part_line and end_p in part_line:
@@ -620,7 +635,6 @@ def drawing_heat_map(input, prediction_all, vis, name, tmp_it=0):
     heat_map = normalize_img(torch.from_numpy(final_out).unsqueeze(0))
     vis.image(heat_map[0, :, :, :], win=name, opts=dict(title=name + ' images'))
     return heat_map
-
 
 def colorEncode(labelmap, colors):
     labelmap = labelmap.astype('int')
