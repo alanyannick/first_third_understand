@@ -104,7 +104,7 @@ def test(
     if scene_flag:
         for batch_i, (imgs, targets, scenes, scenes_gt, ignore_mask, video_mask, frame_mask) in enumerate(dataloader):
             total_count += 1
-            if batch_i > 500:
+            if batch_i > 300:
                 break
             with torch.no_grad():
                 if worker == 'detection':
@@ -149,9 +149,10 @@ def test(
                         video_mask_gt = cv2.resize((video_mask[0][i,:,:] * 255.0), (800,800))
 
                         # insert pose_prediction and gt to html
-                        ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                           name='pose_predict'+str(i)+'.jpg',
-                                                           img=affordance)
+                        # ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                        #                                    name='pose_predict'+str(i)+'.jpg',
+                        #                                    img=affordance)
+
                         ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
                                                            name='pose_' + str(i) + '_gt.jpg',
                                                            img=video_mask_gt)
@@ -164,6 +165,22 @@ def test(
                                                            name='predict_pose_heat_map'+str(i)+'.jpg',
                                                            img=final_out)
 
+                        # insert pose prediction
+                        predict_bbox = [0, 0, 800, 800]
+                        if i == 4:
+                            pose_draw_label = 7
+                        elif i == 5:
+                            pose_draw_label = 12
+                        elif i == 6:
+                            pose_draw_label = 17
+                        else:
+                            pose_draw_label = i
+                        predict_pose_heat_map = drawing_bbox_keypoint_gt(input=scenes, bbox=predict_bbox,
+                                                                             label=pose_draw_label)
+                        ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                           name='pose_prediction_distribution'+str(i)+'.jpg',
+                                                           img=(predict_pose_heat_map))
+
                         # generate final affordance mask
                         labelmap_rgb[affordance >= each_map_threshold] = affordance[affordance >= each_map_threshold]
 
@@ -171,14 +188,11 @@ def test(
                         labelmap_rgb_gt[video_mask_gt >= 40.0] = video_mask_gt[video_mask_gt >= 40.0]
 
 
-                    # Source image ego & exo
+
+                    # Source image ego
                     ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
                                                        name='input_image_ego.jpg',
                                                        img=np.transpose((imgs[0]+128).cpu().float().numpy(), (1,2,0)))
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='input_image'
-                                    + '_gt_label' + str(gt_pose_label) + '_predict_label' + str(predict_pose_label) +'.jpg',
-                                                       img=np.transpose((scenes_gt[0]+128).cpu().float().numpy(), (1,2,0)))
 
                     # group map
                     if gt_pose_label == 0:
@@ -188,6 +202,28 @@ def test(
                     else:
                         group_map = [4]
 
+                    # Pose prediction
+                    predict_bbox = [0, 0, 800, 800]
+                    predict_label = predict_pose_label
+                    if predict_label == 2:
+                        predict_label += 5
+                    gt_label = gt_pose_label
+                    predict_bbox_img_with_keypoint = drawing_bbox_keypoint_gt(input=scenes, bbox=predict_bbox,
+                                                                              label=predict_label)
+                    gt_bbox_img_with_keypoint = drawing_bbox_keypoint_gt(input=scenes_gt, bbox=predict_bbox,
+                                                                         label=gt_label)
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                       name='pose_prediction.jpg',
+                                                       img=(predict_bbox_img_with_keypoint))
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                       name='pose_gt.jpg',
+                                                       img=(gt_bbox_img_with_keypoint))
+
+                    # Source image exo
+                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                       name='input_image'
+                                    + '_gt_label' + str(gt_pose_label) + '_predict_label' + str(predict_pose_label) +'.jpg',
+                                                       img=np.transpose((scenes_gt[0]+128).cpu().float().numpy(), (1,2,0)))
 
                     # heatmap prediction
                     heatmap_all = cv2.applyColorMap(np.uint8(labelmap_rgb)
@@ -243,9 +279,6 @@ def test(
                     txts = []
                     links = []
 
-                # cv2.imwrite('/home/yangmingwen/first_third_person/pose' + str(300) + '.jpg',
-                # cv2.cvtColor(affordance, cv2.COLOR_GRAY2RGB)* scenes_tmp + scenes_tmp)
-                # @TBD ===========
                 # get the final affordance
                 debug_region = True
                 if not debug_region:
@@ -308,11 +341,11 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weight_retina_05_01_Pose_Affordance_Third_weight_balance_Mask_True_with_ego_bp/backup8.pt', help='path to weights file')
+    parser.add_argument('--weights', type=str, default='weight_retina_05_01_Pose_Affordance_Third_weight_balance_Mask_True_with_ego_bp/backup12.pt', help='path to weights file')
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
-    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/affordance_out_501_train_third_test_with_egobp8_no_crop_latest_verify_video_bk8_test/', help='cfg file path')
+    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/affordance_out_501_train_third_test_with_egobp12_no_crop_latest_verify_video_bk8_test/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
     parser.add_argument('--testing_data_mode', type=bool, default=True, help='using testing or training data')
     parser.add_argument('--center_crop', type=bool, default=False, help='using testing or training data')
