@@ -53,8 +53,9 @@ def test(
         test_path = data_config['valid']
         pickle_video_mask = data_config['pickle_video_mask_test']
         pickle_ignore_mask = data_config['pickle_ignore_mask_test']
+        pickle_frame_mask = data_config['pickle_frame_mask_test']
     else:
-        test_path = data_config['train']
+        test_path = data_config['valid2']
         pickle_video_mask = data_config['pickle_video_mask_train']
         pickle_ignore_mask = data_config['pickle_ignore_mask_train']
 
@@ -77,7 +78,8 @@ def test(
                                         img_size=img_size, augment=False, shuffle_switch=shuffle_switch,
                                         center_crop=center_crop,
                                         video_mask=pickle_video_mask,
-                                        ignore_mask=pickle_ignore_mask
+                                        ignore_mask=pickle_ignore_mask,
+                                        frame_mask=pickle_frame_mask,
                                         )
 
     print('%11s' * 5 % ('Image', 'Total', 'P', 'R', 'mAP'))
@@ -306,14 +308,14 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weight_retina_04_30_Pose_Affordance_Third/latest.pt', help='path to weights file')
+    parser.add_argument('--weights', type=str, default='weight_retina_05_01_Pose_Affordance_Third_weight_balance_Mask_True_with_ego_bp/backup8.pt', help='path to weights file')
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
-    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/affordance_out_430_train_third_train/', help='cfg file path')
+    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/affordance_out_501_train_third_test_with_egobp8_no_crop_latest_verify_video_bk8_test/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
-    parser.add_argument('--testing_data_mode', type=bool, default=False, help='using testing or training data')
-    parser.add_argument('--center_crop', type=bool, default=True, help='using testing or training data')
+    parser.add_argument('--testing_data_mode', type=bool, default=True, help='using testing or training data')
+    parser.add_argument('--center_crop', type=bool, default=False, help='using testing or training data')
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='path to model config file')
     opt = parser.parse_args()
     print(opt, end='\n\n')

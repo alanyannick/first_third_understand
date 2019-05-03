@@ -214,8 +214,10 @@ class load_images_and_labels():  # for training
                     frame_tag = img_path.split('/')[-1].split('.jpg')[0]
                     per_frame_mask = self.gt_per_frame_mask[frame_tag]
                     per_frame_mask[per_frame_mask == -1] = 7
-                except:
-                    print('Dont care during training')
+
+                except Exception as error:
+                    print(error)
+                    print('Dont care during training:' + frame_tag)
                     frame_tag = 'bwd-ZGWMEEGO_1_first-00560'
                     per_frame_mask = self.gt_per_frame_mask[frame_tag]
                     per_frame_mask[per_frame_mask == -1] = 7
