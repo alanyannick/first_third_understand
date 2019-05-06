@@ -213,7 +213,12 @@ def test(
                     predict_label = predict_pose_label
                     if predict_label == 2:
                         predict_label += 5
-                    gt_label = gt_pose_label
+
+                    if gt_pose_label == 2:
+                        gt_label = gt_pose_label + 5
+                    else:
+                        gt_label = gt_pose_label
+
                     predict_bbox_img_with_keypoint = drawing_bbox_keypoint_gt(input=scenes, bbox=predict_bbox,
                                                                               label=predict_label)
                     gt_bbox_img_with_keypoint = drawing_bbox_keypoint_gt(input=scenes_gt, bbox=predict_bbox,
