@@ -9,6 +9,12 @@ from maskrcnn_benchmark.modeling.detector import build_detection_model
 from maskrcnn_benchmark.config import cfg
 import numpy as np
 
+# I3D model for action recognition
+import networks.i3dpt as i3dpt
+from networks.i3dpt import I3D
+from networks.i3dpt import Unit3Dpy
+
+
 class First_Third_Net(nn.Module):
     def __init__(self):
         nn.Module.__init__(self)
@@ -31,7 +37,10 @@ class First_Third_Net(nn.Module):
         # Third branch switch
         self.third_branch_switch = True
         # First branch
-        self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=3).cuda()
+        # self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=3).cuda()
+
+        # Build ego I3D module
+        self.first_ego_pose_branch = egoFirstBranchModelI3D(num_classes=3).cuda()
 
         # Second Branch
         self.second_exo_affordance_branch = exoSecondBranchModel(256, num_classes=7).cuda()
@@ -105,7 +114,6 @@ class First_Third_Net(nn.Module):
         _, ego_feature_1, ego_feature_2, ego_feature_3, _ = self.rgb(self.ego_rgb.cuda())
         _, exo_feature_1, exo_feature_2, exo_feature_3, _ = self.rgb(self.exo_rgb.cuda())
 
-        # ======================@TBD design a feature merge module here to handle the multi-scale output of the retinaNet
         # Size 1 x 256 x 13 x13
         retina_ego_features = self.merge_feature(ego_feature_1, ego_feature_2, ego_feature_3).cuda()
         retina_exo_features = self.merge_feature(exo_feature_1, exo_feature_2, exo_feature_3).cuda()
@@ -277,6 +285,44 @@ class egoFirstBranchModel(nn.Module):
         out2 = self.linear1(out1)
         out3 = self.linear2(out2)
         return out3
+
+class egoFirstBranchModelI3D(nn.Module):
+
+    def __init__(self, num_classes=3):
+        super(egoFirstBranchModelI3D, self).__init__()
+        # Build i3d model as ego backbone
+        i3d_rgb_model_name='/home/yangmingwen/first_third_person/first_third_understanding/model/model_rgb.pth'
+        i3d_rgb = I3D(num_classes=400, modality='rgb')
+        # i3d_rgb.eval()
+        i3d_rgb.load_state_dict(torch.load(i3d_rgb_model_name))
+        # i3d_model backbone
+        self.i3d_rgb = torch.nn.Sequential(*list(torch.nn.DataParallel(i3d_rgb).module.children())[:-4])
+
+        # i3d_model final output branch submodule
+        self.avg_pool = torch.nn.AvgPool3d((2, 7, 7), (1, 1, 1))
+
+        self.num_classes = num_classes
+        self.dropout = torch.nn.Dropout(0)
+        self.conv3d_0c_1x1 = Unit3Dpy(
+            in_channels=1024,
+            out_channels=self.num_classes,
+            kernel_size=(1, 1, 1),
+            activation=None,
+            use_bias=True,
+            use_bn=False)
+        self.i3d_softmax = torch.nn.Softmax(1)
+
+    def forward(self, x):
+        out_backbone = self.i3d_rgb(x)
+        out = self.avg_pool(out_backbone)
+        out = self.dropout(out)
+        out = self.conv3d_0c_1x1(out)
+        out = out.squeeze(3)
+        out = out.squeeze(3)
+        out = out.mean(2)
+        out_logits = out
+        # out = self.softmax(out_logits)
+        return out_backbone, out_logits
 
 
 class exoSecondBranchModel(nn.Module):
@@ -493,4 +539,5 @@ class RegressionModel(nn.Module):
 if __name__ == '__main__':
     net = First_Third_Net()
     net(Variable(torch.randn(1, 3, 928, 640)).cuda().float())
+    net.first_ego_pose_branch(Variable(torch.randn(1, 3, 64, 224, 224)).cuda().float())
     net()
