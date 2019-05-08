@@ -132,6 +132,7 @@ class load_images_and_labels():  # for training
                     normalize_transform,
                 ]
             )
+
         else:
             self.transforms = T.Compose(
                 [
@@ -196,7 +197,7 @@ class load_images_and_labels():  # for training
             else:
                 img_path = self.img_files[files_index]
                 label_path = self.label_files[files_index]
-            img = cv2.imread(img_path)  # BGR
+
             scene_flag = True
             if scene_flag:
                 scene_path = (img_path.split(img_path.split('-')[-1])[0] + '00001.jpg').replace('images', 'scenes').replace('first-', 'third-')
@@ -236,25 +237,88 @@ class load_images_and_labels():  # for training
                     self.per_video_mask = self.gt_video_mask[video_tag]
                     self.per_video_ignore_mask = self.ignore_video_mask[video_tag]
 
-            if img is None:
-                continue
-
             # Input ego/exo/gt_exo
-            img = self.transforms(img)
+            # Ego 64 frames for I3D
+            img = []
+            img_name = img_path.split('/')[-1].split('first-')[-1]
+            img_index = int(img_name.split('.jpg')[0])
+
+            for index_value in range(0,-32,-1):
+                # (0, -31)
+
+                img_index_iter = img_index + index_value
+                img_path_iter = img_path.replace(str(img_index), str(img_index_iter))
+                img_i3d = cv2.imread(img_path_iter)
+
+                if img_i3d is None:
+                    assert "cannot find the image" + img_path_iter
+                    # solve the -1 and > index video
+                    previous_path_iter = img_path.replace(str(img_index), str(img_index_iter + 1))
+                    prev_img = cv2.imread(previous_path_iter)
+
+                    if prev_img is None:
+                        while prev_img is None:
+                            previous_path_iter = img_path.replace(str(img_index), str(img_index_iter + 1))
+                            img_index_iter = img_index_iter + 1
+                            prev_img = cv2.imread(previous_path_iter)
+
+                    img_i3d = prev_img
+                else:
+                    img_i3d = img_i3d
+
+                img.append(img_i3d)
+            # reverve the image
+            img = img[::-1]
+
+            for index_value in range(1, 33):
+                # (1, 32)
+
+                img_index_iter = img_index + index_value
+                img_path_iter = img_path.replace(str(img_index), str(img_index_iter))
+                img_i3d = cv2.imread(img_path_iter)
+
+                if img_i3d is None:
+                    assert "cannot find the image" + img_path_iter
+                    # solve the -1 and > index video
+                    previous_path_iter = img_path.replace(str(img_index), str(img_index_iter - 1))
+                    prev_img = cv2.imread(previous_path_iter)
+
+                    if prev_img is None:
+                        while prev_img is None:
+                            previous_path_iter = img_path.replace(str(img_index), str(img_index_iter - 1))
+                            img_index_iter = img_index_iter - 1
+                            prev_img = cv2.imread(previous_path_iter)
+                    img_i3d = prev_img
+
+                else:
+                    img_i3d = img_i3d
+                img.append(img_i3d)
+
+            # Normalize the ego as I3D input
+            if self.center_crop:
+                for i in range(0, len(img)):
+                    img[i] = cv2.resize(img[i], (256, 256)) / 128 - 1
+            else:
+                for i in range(0, len(img)):
+                    img[i] = cv2.resize(img[i], (224, 224)) / 128 - 1
+
             scene_img = self.transforms(scene_img)
             scene_gt_img = self.transforms(scene_gt_img)
 
             # Achieve center crop here
             # center_crop = False
             if self.center_crop:
-                x_crop1 = random.randint(0, 184)
-                y_crop1 = random.randint(0, 184)
+                x_crop1 = random.randint(0, 30)
+                y_crop1 = random.randint(0, 30)
                 x_crop2 = random.randint(0, 184)
                 y_crop2 = random.randint(0, 184)
                 x_crop3= round(float(x_crop2) * 16 / 985)
                 y_crop3 = round(float(y_crop2) * 16 / 985)
 
-                img = img[:,y_crop1:y_crop1 + 800, x_crop1:x_crop1 + 800]
+                # Random crop for img // Note here will be W, H, C, need to be changed dims for I3D input
+                for i in range(0, len(img)):
+                    img[i] = img[i][y_crop1:y_crop1 + 224, x_crop1:x_crop1 + 224, :]
+
                 scene_img = scene_img[:, y_crop2:y_crop2 + 800, x_crop2:x_crop2 + 800]
                 scene_gt_img = scene_gt_img[:, y_crop2:y_crop2 + 800, x_crop2:x_crop2 + 800]
                 self.per_video_mask = self.per_video_mask[:,y_crop3:y_crop3 + 13, x_crop3:x_crop3 + 13]
@@ -314,7 +378,9 @@ class load_images_and_labels():  # for training
 
         # Transfer the label as contin
         labels_all = np.ascontiguousarray(labels_all, dtype=np.float32)
-        return img_all, labels_all, scene_all, scene_gt_all, ignore_mask, video_mask, frame_mask
+
+        # np.array img all will change it to 12 * 64 * 224 * 224 * 3 then transpose to 12 * 3 * 64 * 224 * 224
+        return np.array(img_all).transpose(0, 4, 1, 2, 3), labels_all, scene_all, scene_gt_all, ignore_mask, video_mask, frame_mask
         #         scene_all), torch.from_numpy(scene_gt_all)
 
 
