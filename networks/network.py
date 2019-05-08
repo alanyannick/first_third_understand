@@ -5,6 +5,10 @@ import torchvision.models.resnet as resnet
 import torch.nn.functional as F
 # import model
 from torch.autograd import Variable
+
+import sys
+sys.path.append("/home/yangmingwen/first_third_person/first_third_understanding/networks/maskrcnn_benchmark/")
+
 from maskrcnn_benchmark.modeling.detector import build_detection_model
 from maskrcnn_benchmark.config import cfg
 import numpy as np
