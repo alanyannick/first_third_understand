@@ -9,6 +9,12 @@ from maskrcnn_benchmark.modeling.detector import build_detection_model
 from maskrcnn_benchmark.config import cfg
 import numpy as np
 
+# I3D model for action recognition
+import networks.i3dpt as i3dpt
+from networks.i3dpt import I3D
+from networks.i3dpt import Unit3Dpy
+
+
 class First_Third_Net(nn.Module):
     def __init__(self):
         nn.Module.__init__(self)
@@ -31,7 +37,10 @@ class First_Third_Net(nn.Module):
         # Third branch switch
         self.third_branch_switch = True
         # First branch
-        self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=3).cuda()
+        # self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=3).cuda()
+
+        # Build ego I3D module
+        self.first_ego_pose_branch = egoFirstBranchModelI3D(num_classes=3).cuda()
 
         # Second Branch
         self.second_exo_affordance_branch = exoSecondBranchModel(256, num_classes=7).cuda()
@@ -42,6 +51,7 @@ class First_Third_Net(nn.Module):
 
         # Merge Branch
         self.merge_feature = MergeFeatureModule(256).cuda()
+        self.merge_feature_i3d = MergeFeatureI3d(256).cuda()
         # class branch
         # self.classifier = ClassificationModel(256, num_classes=19)
 
@@ -71,9 +81,11 @@ class First_Third_Net(nn.Module):
         self.soft_max = torch.nn.Softmax()
 
         if with_weight_balance:
+            # balance the weight from 0 - 1
             weights_mask = [1/0.0009942434210526317 / 1000,1/0.0018601973684210526 / 1000, 1/0.0009368832236842105 /1000,
-                            1/0.0018332648026315789 /1000, 1/0.0018505345394736843 /1000, 1/0.0009594983552631579 /1000, 1/0.0009467516447368421/ 1000,
-                       1/0.9906186266447369/1000]
+                            1/0.0018332648026315789 /1000, 1/0.0018505345394736843 /1000, 1/0.0009594983552631579 /1000,
+                            1/0.0009467516447368421/ 1000, 1/0.9906186266447369/1000]
+
             mask_weights = torch.FloatTensor(weights_mask).cuda()
             self.ce2d_loss= nn.CrossEntropyLoss(weight=mask_weights)
 
@@ -98,32 +110,30 @@ class First_Third_Net(nn.Module):
         self.losses = {}
         self.exo_rgb_gt = exo_rgb_gt
         # change the list of tensor to 8x3x800x800
-        self.ego_rgb = torch.stack(ego_rgb)
+        self.ego_rgb = torch.from_numpy(ego_rgb)
         self.exo_rgb = torch.stack(exo_rgb)
-        # ======================= get the feature pyramid here ==========
-        # with torch.no_grad():
-        _, ego_feature_1, ego_feature_2, ego_feature_3, _ = self.rgb(self.ego_rgb.cuda())
-        _, exo_feature_1, exo_feature_2, exo_feature_3, _ = self.rgb(self.exo_rgb.cuda())
-
-        # ======================@TBD design a feature merge module here to handle the multi-scale output of the retinaNet
-        # Size 1 x 256 x 13 x13
-        retina_ego_features = self.merge_feature(ego_feature_1, ego_feature_2, ego_feature_3).cuda()
-        retina_exo_features = self.merge_feature(exo_feature_1, exo_feature_2, exo_feature_3).cuda()
 
         # ====================== First Branch: ego pose
         # for cross_entropy / with out B X 1 X Class
-
+        i3d_backbone_feature, ego_pose_out = self.first_ego_pose_branch(Variable(self.ego_rgb).cuda().float())
+        retina_ego_features = self.merge_feature_i3d(i3d_backbone_feature).cuda()
         # Detach pose branch for avoiding influence
         detach_ego = False
         if detach_ego:
             retina_ego_features = retina_ego_features.detach()
-        ego_pose_out = self.first_ego_pose_branch(retina_ego_features)
 
         # Sigmoid the possiblity
         # Sigmoid = torch.nn.Sigmoid()
         # ego_pose_out = Sigmoid(ego_pose_out)
 
         # ====================== Second Branch: exo affordance
+
+        # ======================= get the feature pyramid here ==========
+        # with torch.no_grad():
+        _, exo_feature_1, exo_feature_2, exo_feature_3, _ = self.rgb(self.exo_rgb.cuda())
+
+        # Size 1 x 256 x 13 x13
+        retina_exo_features = self.merge_feature(exo_feature_1, exo_feature_2, exo_feature_3).cuda()
         # get the mask_tensor here
         ignore_mask = torch.from_numpy(np.array(ignore_mask)).float().cuda()
         frame_mask = torch.from_numpy(np.array(frame_mask)).squeeze(1).long().cuda()#type(torch.cuda.LongTensor)
@@ -212,23 +222,6 @@ class First_Third_Net(nn.Module):
         else:
             return torch.argmax(ego_pose_out, -1), exo_affordance_out, final_out_feature_final
 
-        # =======================First / Second  / third branch here =========================================
-        # Switch for adding ss & sfn feature
-        # concatted_features = torch.cat([retina_ego_features, retina_ego_features], 1)
-        # ego_out = torch.cat([self.classifier(feature) for feature in retina_ego_features], dim=1)
-        # ego_out = nn.AvgPool2d((ego_out.shape[-2:]))(ego_out)
-        # F.interpolate(retina_exo_features, scale_factor=2, mode="nearest")
-        # regression = torch.cat([self.regressionModel(feature) for feature in features], dim=1)
-        # @Verify the config file channel here
-        # print(concatted_features.shape)
-        # Note here, the targets dimension should be 1,1,5
-        # if not test_mode:
-        #     loss = self.classifier(concatted_features, self.targets, self.test_mode)
-        #     return loss
-        # else:
-        #     self.bbox_predict, [output, pred_conf, pred_boxes] = self.classifier(concatted_features, self.targets, self.test_mode)
-        #     return self.bbox_predict, [output, pred_conf, pred_boxes]
-
 
 class egoFirstBranchModel(nn.Module):
     def __init__(self, num_features_in, num_classes=4, prior=0.01, feature_size=256):
@@ -277,6 +270,44 @@ class egoFirstBranchModel(nn.Module):
         out2 = self.linear1(out1)
         out3 = self.linear2(out2)
         return out3
+
+class egoFirstBranchModelI3D(nn.Module):
+
+    def __init__(self, num_classes=3):
+        super(egoFirstBranchModelI3D, self).__init__()
+        # Build i3d model as ego backbone
+        i3d_rgb_model_name='/home/yangmingwen/first_third_person/first_third_understanding/model/model_rgb.pth'
+        i3d_rgb = I3D(num_classes=400, modality='rgb')
+        # i3d_rgb.eval()
+        i3d_rgb.load_state_dict(torch.load(i3d_rgb_model_name))
+        # i3d_model backbone
+        self.i3d_rgb = torch.nn.Sequential(*list(torch.nn.DataParallel(i3d_rgb).module.children())[:-4])
+
+        # i3d_model final output branch submodule
+        self.avg_pool = torch.nn.AvgPool3d((2, 7, 7), (1, 1, 1))
+
+        self.num_classes = num_classes
+        self.dropout = torch.nn.Dropout(0)
+        self.conv3d_0c_1x1 = Unit3Dpy(
+            in_channels=1024,
+            out_channels=self.num_classes,
+            kernel_size=(1, 1, 1),
+            activation=None,
+            use_bias=True,
+            use_bn=False)
+        self.i3d_softmax = torch.nn.Softmax(1)
+
+    def forward(self, x):
+        out_backbone = self.i3d_rgb(x)
+        out = self.avg_pool(out_backbone)
+        out = self.dropout(out)
+        out = self.conv3d_0c_1x1(out)
+        out = out.squeeze(3)
+        out = out.squeeze(3)
+        out = out.mean(2)
+        out_logits = out
+        # out = self.softmax(out_logits)
+        return out_backbone, out_logits
 
 
 class exoSecondBranchModel(nn.Module):
@@ -398,9 +429,25 @@ class MergeFeatureModule(nn.Module):
         out = torch.cat((out2, out4, out6), dim=1)
 
         # B X W X H X C
+        # compress input should be B * C * H * W
         out7 = self.conv_compress(out)
         return out7
 
+class MergeFeatureI3d(nn.Module):
+    def __init__(self, feature_size=256):
+        super(MergeFeatureI3d, self).__init__()
+        # Compress channel
+        self.conv_compress = nn.Conv2d(1024, feature_size, kernel_size=1)
+        self.max_pooling = nn.MaxPool1d(8)
+        self.upsampled = nn.Upsample(size=13, mode='bilinear')
+    def forward(self, x):
+        out = x.permute(0, 1, 3, 4, 2).contiguous().view(x.shape[0], 49 * 1024, 8)
+        out = self.max_pooling(out).view(x.shape[0], 7, 7, 1024)
+        # compress input should be B * C * H * W
+        out = self.conv_compress(out.permute(0,3,1,2))
+        # upscale 7x7 to 13x13
+        out = self.upsampled(out)
+        return out
 
 class ClassificationModel(nn.Module):
     def __init__(self, num_features_in, num_anchors=9, num_classes=80, prior=0.01, feature_size=256):
@@ -493,4 +540,5 @@ class RegressionModel(nn.Module):
 if __name__ == '__main__':
     net = First_Third_Net()
     net(Variable(torch.randn(1, 3, 928, 640)).cuda().float())
+    i3d_backbone_feature, output = net.first_ego_pose_branch(Variable(torch.randn(1, 3, 64, 224, 224)).cuda().float())
     net()
