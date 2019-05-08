@@ -254,13 +254,25 @@ class load_images_and_labels():  # for training
                     assert "cannot find the image" + img_path_iter
                     # solve the -1 and > index video
                     previous_path_iter = img_path.replace(str(img_index), str(img_index_iter + 1))
+
+                    #@TODO Could be optimized with the "isDir"
                     prev_img = cv2.imread(previous_path_iter)
 
                     if prev_img is None:
+                        # important Notice // Need to seriously gurantee here !!!
+                        # using while should be really careful @Yangming
+                        break_i = 0
                         while prev_img is None:
+                            break_i += 1
                             previous_path_iter = img_path.replace(str(img_index), str(img_index_iter + 1))
                             img_index_iter = img_index_iter + 1
+                            if img_index_iter > img_index:
+                                print('Cannot find source image, please check' + previous_path_iter)
                             prev_img = cv2.imread(previous_path_iter)
+
+                            if break_i > 100:
+                                break
+
 
                     img_i3d = prev_img
                 else:
@@ -284,10 +296,19 @@ class load_images_and_labels():  # for training
                     prev_img = cv2.imread(previous_path_iter)
 
                     if prev_img is None:
+
+                        break_i = 0
                         while prev_img is None:
+                            break_i += 1
                             previous_path_iter = img_path.replace(str(img_index), str(img_index_iter - 1))
                             img_index_iter = img_index_iter - 1
+                            if img_index_iter < img_index:
+                                print('Cannot find source image, please check' + previous_path_iter)
                             prev_img = cv2.imread(previous_path_iter)
+
+                            if break_i > 100:
+                                assert "Something wrong happened"
+                                break
                     img_i3d = prev_img
 
                 else:
