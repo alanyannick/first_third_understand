@@ -131,7 +131,7 @@ def train(
             mask_loss_switch = True
         else:
             lr = lr0
-            mask_loss_switch = False
+            mask_loss_switch = True
         for g in optimizer.param_groups:
             g['lr'] = lr
 
@@ -170,7 +170,6 @@ def train(
 
             # drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
             # drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, label=predict_label, name='predict_', vis=vis)
-            # drawing_heat_map(input=model.exo_rgb, prediction_all=model.classifier.prediction_all, name='heat_map_', vis=vis)
 
             # @TODO: Muilti-batch here
             # accumulate gradient for x batches before optimizing
@@ -202,7 +201,7 @@ def train(
             # if loss_per_target < best_loss:
             #     best_loss = loss_per_target
             # Save backup weights every 5 epochs
-            if (epoch > 0) & (epoch % 1 == 0):
+            if (epoch > 0) & (epoch % 2 == 0):
                 backup_file_name = 'backup{}.pt'.format(epoch)
                 backup_file_path = os.path.join(weights_path, backup_file_name)
                 os.system('cp {} {}'.format(
