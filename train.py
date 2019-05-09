@@ -23,6 +23,9 @@ DARKNET_WEIGHTS_URL = 'https://pjreddie.com/media/files/{}'.format(DARKNET_WEIGH
 import visdom
 vis = visdom.Visdom(port=8399)
 
+
+# CUDA_VISIBLE_DEVICES=2 python train.py --batch-size 4 --weight weight_retina_05_09_Pose_Affordance_Third_bp_3 --epochs 100 --data-config cfg/person.data
+
 def train(
         net_config_path,
         data_config_path,
@@ -75,7 +78,7 @@ def train(
                                         video_mask=pickle_video_mask,
                                         ignore_mask=pickle_ignore_mask)
 
-    lr0 = 0.01
+    lr0 = 0.001
     if resume:
         checkpoint = torch.load(latest_weights_file, map_location='cpu')
         model.load_state_dict(checkpoint['model'])
@@ -115,130 +118,140 @@ def train(
     t0 = time.time()
     from utils_lib.utils import VisuaLoss
     visLoss = VisuaLoss(vis)
-
+    count_i = 0
     for epoch in range(epochs):
-        epoch += start_epoch
-        print(('%8s%12s' + '%10s' * 14) % ('Epoch', 'Batch', 'x', 'y', 'w', 'h', 'conf', 'cls', 'total', 'P', 'R',
-                                           'nTargets', 'TP', 'FP', 'FN', 'time'))
+        try:
+            epoch += start_epoch
+            print(('%8s%12s' + '%10s' * 14) % ('Epoch', 'Batch', 'x', 'y', 'w', 'h', 'conf', 'cls', 'total', 'P', 'R',
+                                               'nTargets', 'TP', 'FP', 'FN', 'time'))
 
-        # Update scheduler (automatic)
-        # @TODO Trying LR here @yangming
-        # scheduler.step()
-        # Update scheduler (manual)  at 0, 54, 61 epochs to 1e-3, 1e-4, 1e-5
+            # Update scheduler (automatic)
+            # @TODO Trying LR here @yangming
+            # scheduler.step()
+            # Update scheduler (manual)  at 0, 54, 61 epochs to 1e-3, 1e-4, 1e-5
 
-        if epoch > 1:
-            lr = lr0 / 10
-            mask_loss_switch = True
-        else:
-            lr = lr0
-            mask_loss_switch = True
-        for g in optimizer.param_groups:
-            g['lr'] = lr
+            if epoch > 2:
+                lr = lr0 / 10
+                mask_loss_switch = True
+            elif epoch > 5:
+                lr = lr0 / 100
+                mask_loss_switch = True
+            else:
+                lr = lr0
+                mask_loss_switch = True
+            for g in optimizer.param_groups:
+                g['lr'] = lr
 
-        # Freeze darknet53.conv.74 layers for first epoch
-        if freeze_backbone:
-            if epoch == 0:
-                for i, (name, p) in enumerate(model.named_parameters()):
-                    if int(name.split('.')[1]) < 75:  # if layer < 75
-                        p.requires_grad = False
-            elif epoch == 1:
-                for i, (name, p) in enumerate(model.named_parameters()):
-                    if int(name.split('.')[1]) < 75:  # if layer < 75
-                        p.requires_grad = True
+            # Freeze darknet53.conv.74 layers for first epoch
+            if freeze_backbone:
+                if epoch == 0:
+                    for i, (name, p) in enumerate(model.named_parameters()):
+                        if int(name.split('.')[1]) < 75:  # if layer < 75
+                            p.requires_grad = False
+                elif epoch == 1:
+                    for i, (name, p) in enumerate(model.named_parameters()):
+                        if int(name.split('.')[1]) < 75:  # if layer < 75
+                            p.requires_grad = True
 
-        ui = -1
-        rloss = defaultdict(float)  # running loss
-        metrics = torch.zeros(3, num_classes)
-        optimizer.zero_grad()
-
-        for i, (imgs, targets, scenes, scenes_gt, ignore_mask, video_mask, frame_mask) in enumerate(dataloader):
-            if sum([len(x) for x in targets]) < 1:  # if no targets continue
-                continue
-
-            # SGD burn-in
-            # if (epoch == 0) & (i <= 100):
-            #     lr = lr0 * (i / 1000) ** 4
-            #     for g in optimizer.param_groups:
-            #         g['lr'] = lr
-            #     print('Current_lr:' + str(lr))
-
-            print('Current_lr:' + str(lr))
-
-            # Compute loss, compute gradient, update parameters
-            loss = model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask, frame_mask, mask_loss_switch=mask_loss_switch)
-            loss.backward()
-
-            # drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
-            # drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, label=predict_label, name='predict_', vis=vis)
-
-            # @TODO: Muilti-batch here
-            # accumulate gradient for x batches before optimizing
-            # if ((i + 1) % accumulated_batches == 0) or (i == len(dataloader) - 1):
-            optimizer.step()
             optimizer.zero_grad()
 
-            # Running epoch-means of tracked metrics
-            # ui += 1
-            # for key, val in model.losses.items():
-            #     rloss[key] = rloss[key] #  (rloss[key] * ui + val) / (ui + 1)
+            for i, (imgs, targets, scenes, scenes_gt, ignore_mask, video_mask, frame_mask) in enumerate(dataloader):
+                if sum([len(x) for x in targets]) < 1:  # if no targets continue
+                    continue
 
-            s =('%g/%g' % (epoch, epochs - 1),
-                       '%g/%g' % (i, len(dataloader) - 1),
-                        'total_loss', float(loss),
-                        'pose_loss:', float(model.losses['pose_loss']),
-                        'affordance_loss', float(model.losses['affordance_loss']),
-                        'mask_loss', float(model.losses['mask_loss']),
-                        'time:', time.time() - t0)
+                # SGD burn-in
+                # if (epoch == 0) & (i <= 100):
+                #     lr = lr0 * (i / 1000) ** 4
+                #     for g in optimizer.param_groups:
+                #         g['lr'] = lr
+                #     print('Current_lr:' + str(lr))
 
-            t0 = time.time()
-            print(s)
-            # visLoss.plot_current_errors(i, 1, rloss)
-            # if loss.detach().cpu().numpy():
-            # Update best loss
-            # Default NT = 1
-            # loss_per_target = rloss['loss'] / rloss['nT']
-            # loss_per_target = rloss['loss'] / 1
-            # if loss_per_target < best_loss:
-            #     best_loss = loss_per_target
-            # Save backup weights every 5 epochs
-            if (epoch > 0) & (epoch % 2 == 0):
-                backup_file_name = 'backup{}.pt'.format(epoch)
-                backup_file_path = os.path.join(weights_path, backup_file_name)
-                os.system('cp {} {}'.format(
-                    latest_weights_file,
-                    backup_file_path,
-                ))
-                print('Save Model Backup')
-                # @TODO: Real Time Test Script
-                # Calculate mAP
-                # mAP, R, P = test.test(
-                #     net_config_path,
-                #     data_config_path,
-                #     latest_weights_file,
-                #     batch_size=batch_size,
-                #     img_size=img_size,
-                #     gpu_choice=gpu_id,
-                #     worker='first'
-                # )
-                # Write epoch results
-                # with open('results.txt', 'a') as file:
-                #     file.write(s + '%11.3g' * 3 % (mAP, P, R) + '\n')
-            if i % 800 == 0:
-                # Save latest checkpoint
-                checkpoint = {'epoch': i,
-                              'best_loss': best_loss,
-                              'model': model.state_dict(),
-                              'optimizer': optimizer.state_dict()}
-                print('Save Model_latest')
-                torch.save(checkpoint, latest_weights_file)
+                print('Current_lr:' + str(lr))
 
-        # Save latest checkpoint
-        checkpoint = {'epoch': epoch,
-                      'best_loss': best_loss,
-                      'model': model.state_dict(),
-                      'optimizer': optimizer.state_dict()}
-        torch.save(checkpoint, best_weights_file)
-        print('Save Model Best')
+                # Compute loss, compute gradient, update parameters
+                loss = model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask, frame_mask, mask_loss_switch=mask_loss_switch)
+                loss.backward()
+
+                # drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
+                # drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, label=predict_label, name='predict_', vis=vis)
+
+                # @TODO: Muilti-batch here
+                # accumulate gradient for x batches before optimizing
+                # if ((i + 1) % accumulated_batches == 0) or (i == len(dataloader) - 1):
+
+                count_i += 1
+
+                if count_i >= 3:
+                    count_i = 0
+                    optimizer.step()
+                    optimizer.zero_grad()
+
+                # Running epoch-means of tracked metrics
+                # ui += 1
+                # for key, val in model.losses.items():
+                #     rloss[key] = rloss[key] #  (rloss[key] * ui + val) / (ui + 1)
+
+                s =('%g/%g' % (epoch, epochs - 1),
+                           '%g/%g' % (i, len(dataloader) - 1),
+                            'total_loss', float(loss),
+                            'pose_loss:', float(model.losses['pose_loss']),
+                            'affordance_loss', float(model.losses['affordance_loss']),
+                            'mask_loss', float(model.losses['mask_loss']),
+                            'time:', time.time() - t0)
+
+                t0 = time.time()
+                print(s)
+                # visLoss.plot_current_errors(i, 1, rloss)
+                # if loss.detach().cpu().numpy():
+                # Update best loss
+                # Default NT = 1
+                # loss_per_target = rloss['loss'] / rloss['nT']
+                # loss_per_target = rloss['loss'] / 1
+                # if loss_per_target < best_loss:
+                #     best_loss = loss_per_target
+                # Save backup weights every 5 epochs
+                if (epoch > 0) & (epoch % 2 == 0):
+                    backup_file_name = 'backup{}.pt'.format(epoch)
+                    backup_file_path = os.path.join(weights_path, backup_file_name)
+                    os.system('cp {} {}'.format(
+                        latest_weights_file,
+                        backup_file_path,
+                    ))
+                    print('Save Model Backup')
+                    # @TODO: Real Time Test Script
+                    # Calculate mAP
+                    # mAP, R, P = test.test(
+                    #     net_config_path,
+                    #     data_config_path,
+                    #     latest_weights_file,
+                    #     batch_size=batch_size,
+                    #     img_size=img_size,
+                    #     gpu_choice=gpu_id,
+                    #     worker='first'
+                    # )
+                    # Write epoch results
+                    # with open('results.txt', 'a') as file:
+                    #     file.write(s + '%11.3g' * 3 % (mAP, P, R) + '\n')
+                if i % 800 == 0:
+                    # Save latest checkpoint
+                    checkpoint = {'epoch': i,
+                                  'best_loss': best_loss,
+                                  'model': model.state_dict(),
+                                  'optimizer': optimizer.state_dict()}
+                    print('Save Model_latest')
+                    torch.save(checkpoint, latest_weights_file)
+
+            # Save latest checkpoint
+            checkpoint = {'epoch': epoch,
+                          'best_loss': best_loss,
+                          'model': model.state_dict(),
+                          'optimizer': optimizer.state_dict()}
+            torch.save(checkpoint, best_weights_file)
+            print('Save Model Best')
+        except Exception as error:
+            print("Something Wrong Happen")
+            print(error)
+            continue
 
 
 if __name__ == '__main__':
