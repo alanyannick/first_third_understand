@@ -240,105 +240,57 @@ def test(
                                                        name='input_image'
                                     + '_gt_label' + str(gt_pose_label) + '_predict_label' + str(predict_pose_label) +'.jpg',
                                                        img=np.transpose((scenes_gt[0]+128).cpu().float().numpy(), (1,2,0)))
+                    
+                    # ----- Affordance prediction -------
+                    visualize_affordance = False
+                    if visualize_affordance:
+                        # heatmap prediction
+                        heatmap_all = cv2.applyColorMap(np.uint8(labelmap_rgb)
+                                                        , cv2.COLORMAP_JET)
 
-                    # heatmap prediction
-                    heatmap_all = cv2.applyColorMap(np.uint8(labelmap_rgb)
-                                                    , cv2.COLORMAP_JET)
+                        # predict affordance
 
-                    # predict affordance
-
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='predict_affordance_heat_map.jpg',
-                                                       img=(heatmap_all*0.4 + np.transpose((scenes[0]+128).cpu().float().numpy(), (1,2,0))*0.6))
-                    # Pick the possible channel prediction
-                    for index in group_map:
-                        affordance = cv2.resize((pose_affordance[:, :, index].cpu().float().numpy() * 255),
-                                                (800, 800))
                         ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                           name='pick_label_prediction' + str(int(index)) + '.jpg', img=affordance)
+                                                           name='predict_affordance_heat_map.jpg',
+                                                           img=(heatmap_all*0.4 + np.transpose((scenes[0]+128).cpu().float().numpy(), (1,2,0))*0.6))
+                        # Pick the possible channel prediction
+                        for index in group_map:
+                            affordance = cv2.resize((pose_affordance[:, :, index].cpu().float().numpy() * 255),
+                                                    (800, 800))
+                            ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                               name='pick_label_prediction' + str(int(index)) + '.jpg', img=affordance)
 
-                    # Get the gt_affordance
-                    labelmap_rgb_gt = cv2.applyColorMap(np.uint8(labelmap_rgb_gt)
-                                                    , cv2.COLORMAP_JET)
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='gt_affordance_heat_map.jpg', img=labelmap_rgb_gt)
-
-                    # Pick the channel groundtruth
-                    for index in group_map:
+                        # Get the gt_affordance
+                        labelmap_rgb_gt = cv2.applyColorMap(np.uint8(labelmap_rgb_gt)
+                                                        , cv2.COLORMAP_JET)
                         ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                           name='pose_' + str(int(index)) + '_gt.jpg')
+                                                           name='gt_affordance_heat_map.jpg', img=labelmap_rgb_gt)
 
-                    # Mask prediction
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='predict_frame_mask_map.jpg',
-                                                       img=(sem_frame_mask))
+                        # Pick the channel groundtruth
+                        for index in group_map:
+                            ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                               name='pose_' + str(int(index)) + '_gt.jpg')
 
-                    frame_heat_affordance = frame_affordance.clone()
-                    soft_max_func = nn.Softmax(dim=3)
-                    sem_frame_affordance = cv2.resize(
-                        torch.max(frame_heat_affordance/(frame_heat_affordance.max()), dim=3)[0].cpu().float().numpy()[0], (800, 800))
-                    sem_heatmap = cv2.applyColorMap(np.uint8(sem_frame_affordance * 255)
-                                                , cv2.COLORMAP_JET)
-                    sem_heatmap_final = np.uint8(sem_heatmap * 0.3 + np.transpose((scenes[0] + 128).cpu().float().numpy(), (1, 2, 0)) * 0.6)
+                        # Mask prediction
+                        ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                           name='predict_frame_mask_map.jpg',
+                                                           img=(sem_frame_mask))
 
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='predict_frame_mask_map_intensity.jpg',
-                                                       img=(sem_heatmap_final))
-                    # Mask gt
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='gt_frame_mask_map.jpg',
-                                                       img=(gt_frame_mask))
+                        frame_heat_affordance = frame_affordance.clone()
+                        soft_max_func = nn.Softmax(dim=3)
+                        sem_frame_affordance = cv2.resize(
+                            torch.max(frame_heat_affordance/(frame_heat_affordance.max()), dim=3)[0].cpu().float().numpy()[0], (800, 800))
+                        sem_heatmap = cv2.applyColorMap(np.uint8(sem_frame_affordance * 255)
+                                                    , cv2.COLORMAP_JET)
+                        sem_heatmap_final = np.uint8(sem_heatmap * 0.3 + np.transpose((scenes[0] + 128).cpu().float().numpy(), (1, 2, 0)) * 0.6)
 
-                    html.add_images(ims, txts, links)
-                    html.save()
-                    ims = []
-                    txts = []
-                    links = []
-
-                # get the final affordance
-                debug_region = True
-                if not debug_region:
-                    final_affordace = torch.argmax(pose_affordance, 2).cpu().float().numpy()
-                    cv2.resize((final_affordace), (800, 800))
-                    heatmap = cv2.applyColorMap(np.uint8(affordance)
-                                                , cv2.COLORMAP_JET)
-                    # transfer img dim
-                    scene_img_np = tensor2im(input)
-                    final_out = np.uint8(heatmap * 0.3 + scene_img_np * 0.5)
-                    vis.image(model.exo_rgb[0, :, :, :], win="exo_rgb", opts=dict(title="scene_" + ' images'))
-                    vis.image(model.ego_rgb[0, :, :, :], win="ego_rgb", opts=dict(title="input_" + ' images'))
-                    vis.image(model.exo_rgb_gt[0, :, :, :], win="exo_rgb_gt", opts=dict(title="scene_gt_" + ' images'))
-                    gt_bbox, gt_label, predict_bbox, predict_label = print_current_predict(targets, model)
-
-                    gt_bbox_img_with_keypoint = drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
-                    predict_bbox_img_with_keypoint = drawing_bbox_gt(input=model.exo_rgb, bbox=predict_bbox, label=predict_label, name='predict_', vis=vis)
-                    # heat_map = drawing_heat_map(input=model.exo_rgb, prediction_all=model.classifier.prediction_all, name='heat_map_',
-                    #                    vis=vis)
-                    exo_rgb = tensor2im(model.exo_rgb)
-                    ego_rgb = tensor2im(model.ego_rgb)
-                    exo_rgb_gt = tensor2im(model.exo_rgb_gt)
-
-                    out_image_folder = os.path.join(out_folder,'images/')
-                    cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_ego.png'), ego_rgb)
-                    cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_exo.png'), exo_rgb)
-                    # cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_heat_map.png'), heat_map)
-                    cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_exo_rgb_gt.png'), exo_rgb_gt)
-                    cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + 'gt_bbox_img_with_keypoint.png'), gt_bbox_img_with_keypoint)
-                    cv2.imwrite(os.path.join(out_image_folder, 'images_' + str(batch_i) + '_predict_bbox_img_with_keypoint.png'), predict_bbox_img_with_keypoint)
-
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_ego.png',
-                                                       img=ego_rgb)
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_exo.png',
-                                                       img=exo_rgb)
-                    # ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_heat_map.png',
-                    #                                          img=heat_map)
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_predict_bbox_img_with_keypoint.png',
-                                                       img=predict_bbox_img_with_keypoint)
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='_exo_rgb_gt.png',
-                                                       img=exo_rgb_gt)
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, out_image_folder, name='gt_bbox_img_with_keypoint.png',
-                                                       img=gt_bbox_img_with_keypoint)
-
+                        ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                           name='predict_frame_mask_map_intensity.jpg',
+                                                           img=(sem_heatmap_final))
+                        # Mask gt
+                        ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                           name='gt_frame_mask_map.jpg',
+                                                           img=(gt_frame_mask))
 
                     html.add_images(ims, txts, links)
                     html.save()
@@ -357,13 +309,13 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weight_retina_05_11_Pose_Affordance_Third_bp_3_lr_0.01/latest.pt', help='path to weights file')
+    parser.add_argument('--weights', type=str, default='weight_retina_05_11_Pose_Affordance_bp_3_lr_0.001/latest.pt', help='path to weights file')
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
-    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/weight_retina_05_11_Pose_Affordance_Third_bp_3_lr_0.01_train/', help='cfg file path')
+    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/weight_retina_05_11_Pose_Affordance_bp_3_lr_0.001-test4/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
-    parser.add_argument('--testing_data_mode', type=bool, default=False, help='using testing or training data')
+    parser.add_argument('--testing_data_mode', type=bool, default=True, help='using testing or training data')
     parser.add_argument('--center_crop', type=bool, default=False, help='using testing or training data')
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='path to model config file')
     opt = parser.parse_args()
