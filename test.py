@@ -30,9 +30,11 @@ def test(
         n_cpus=4,
         gpu_choice = "0",
         worker ='first',
+        affordance_mode = False,
         shuffle_switch = False,
         testing_data = True,
         center_crop = False,
+
 
 ):
 
@@ -240,9 +242,9 @@ def test(
                                                        name='input_image'
                                     + '_gt_label' + str(gt_pose_label) + '_predict_label' + str(predict_pose_label) +'.jpg',
                                                        img=np.transpose((scenes_gt[0]+128).cpu().float().numpy(), (1,2,0)))
-                    
+
                     # ----- Affordance prediction -------
-                    visualize_affordance = False
+                    visualize_affordance = affordance_mode
                     if visualize_affordance:
                         # heatmap prediction
                         heatmap_all = cv2.applyColorMap(np.uint8(labelmap_rgb)
@@ -316,6 +318,7 @@ if __name__ == '__main__':
     parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/weight_retina_05_11_Pose_Affordance_bp_3_lr_0.001-test4/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
     parser.add_argument('--testing_data_mode', type=bool, default=True, help='using testing or training data')
+    parser.add_argument('--affordance_mode', type=bool, default=False, help='using testing or training data')
     parser.add_argument('--center_crop', type=bool, default=False, help='using testing or training data')
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='path to model config file')
     opt = parser.parse_args()
@@ -327,6 +330,7 @@ if __name__ == '__main__':
         opt.cfg,
         opt.data_config,
         opt.weights,
+        affordance_mode=opt.affordance_mode,
         batch_size=opt.batch_size,
         img_size=opt.img_size,
         n_cpus=opt.n_cpus,
