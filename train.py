@@ -130,15 +130,18 @@ def train(
             # scheduler.step()
             # Update scheduler (manual)  at 0, 54, 61 epochs to 1e-3, 1e-4, 1e-5
 
-            if epoch > 2:
+            current_mask_loss_switch = False
+            if epoch > 1:
                 lr = lr0 / 10
                 mask_loss_switch = True
+                current_mask_loss_switch = mask_loss_switch
             elif epoch > 5:
                 lr = lr0 / 100
                 mask_loss_switch = True
+                current_mask_loss_switch = mask_loss_switch
             else:
                 lr = lr0
-                mask_loss_switch = True
+
             for g in optimizer.param_groups:
                 g['lr'] = lr
 
@@ -169,7 +172,7 @@ def train(
                 print('Current_lr:' + str(lr))
 
                 # Compute loss, compute gradient, update parameters
-                loss = model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask, frame_mask, mask_loss_switch=mask_loss_switch)
+                loss = model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask, frame_mask, mask_loss_switch=current_mask_loss_switch)
                 loss.backward()
 
                 # drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)
@@ -239,7 +242,18 @@ def train(
                                   'model': model.state_dict(),
                                   'optimizer': optimizer.state_dict()}
                     print('Save Model_latest')
+                    tmp_weights_file = os.path.join(weights_path, 'tmp'+str(i)+'.pt')
                     torch.save(checkpoint, latest_weights_file)
+
+                if i % 3200 == 0:
+                    # Save tmp checkpoint
+                    checkpoint = {'epoch': i,
+                                  'best_loss': best_loss,
+                                  'model': model.state_dict(),
+                                  'optimizer': optimizer.state_dict()}
+                    print('Save Model_latest')
+                    tmp_weights_file = os.path.join(weights_path, 'tmp_epo'+str(epoch) + '_' +str(i)+'.pt')
+                    torch.save(checkpoint, tmp_weights_file)
 
             # Save latest checkpoint
             checkpoint = {'epoch': epoch,
