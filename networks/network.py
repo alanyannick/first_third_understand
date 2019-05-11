@@ -222,16 +222,19 @@ class First_Third_Net(nn.Module):
             # final_out_feature_filter = torch.log(torch.clamp(final_out_feature_final, min=0.00001, max=0.99999))
             mask_loss = self.ce2d_loss(final_out_feature_final.permute(0, 3, 1, 2), frame_mask).cuda()
 
-            # Constrain loss
-            constain_loss = self.constrain_loss(final_out_feature_final)
+            # Constrain loss without background
+            constain_loss = self.constrain_loss(final_out_feature_final[:,:,:,:7]).cuda()
             # Final loss
             if mask_loss_switch:
-                final_loss = pose_loss + affordance_loss + mask_loss
+                final_loss = pose_loss + affordance_loss + mask_loss + constain_loss
+                self.losses['constrain_loss'] = constain_loss
             else:
                 final_loss = pose_loss + affordance_loss
+
             self.losses['pose_loss'] = pose_loss
             self.losses['affordance_loss'] = affordance_loss
             self.losses['mask_loss'] = mask_loss
+
             return final_loss
 
         else:
@@ -556,9 +559,11 @@ class ConstrainLoss(nn.Module):
         super(ConstrainLoss, self).__init__()
         self.grid_size = 13
         self.z = math.exp(math.log(2 * math.pi) + 1.)
+        self.scaling = 100
         self.loss = 0
 
     def forward(self, feature_input):
+        loss = 0
         # input B * W * H * C
         channel_size = feature_input.size()[3]
         batch_size = feature_input.size()[0]
@@ -575,20 +580,20 @@ class ConstrainLoss(nn.Module):
         for batch_index in range(0, batch_size):
             for channel_index in range(0, channel_size):
                 # Calculate mass of x,y coordinate
-                xv_energy_map = xv[batch_index,:,:,channel_size] * feature_input[batch_index,:,:,channel_size]
-                mass_xv = xv_energy_map.sum() / feature_input[batch_index,:,:,channel_size].sum()
-                yv_energy_map = yv[batch_index,:,:,channel_size] * feature_input[batch_index,:,:,channel_size]
-                mass_yv = yv_energy_map.sum() / feature_input[batch_index,:,:,channel_size].sum()
+                xv_energy_map = xv[batch_index,:,:,channel_index] * feature_input[batch_index,:,:,channel_index]
+                mass_xv = xv_energy_map.sum() / feature_input[batch_index,:,:,channel_index].sum()
+                yv_energy_map = yv[batch_index,:,:,channel_index] * feature_input[batch_index,:,:,channel_index]
+                mass_yv = yv_energy_map.sum() / feature_input[batch_index,:,:,channel_index].sum()
 
                 # Calculate covanrance
-                x_variance = ((xv[batch_index, :, :, channel_size] - mass_xv).pow(2)).sum().float().sqrt()
-                y_variance = ((yv[batch_index, :, :, channel_size] - mass_yv).pow(2)).sum().float().sqrt()
+                x_variance = ((xv[batch_index, :, :, channel_index] - mass_xv).pow(2)).sum().float().sqrt()
+                y_variance = ((yv[batch_index, :, :, channel_index] - mass_yv).pow(2)).sum().float().sqrt()
 
                 # Det xy == 2 * pi * e (x + y)
-                det_xy = (x_variance + y_variance).pow(2) * self.z
+                det_xy = (x_variance + y_variance).pow(2) * self.z / (self.scaling)
                 # Final loss
-                self.loss += det_xy
-
+                loss += det_xy
+        self.loss = loss
         return self.loss
 
 
