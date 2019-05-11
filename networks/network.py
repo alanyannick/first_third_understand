@@ -5,7 +5,7 @@ import torchvision.models.resnet as resnet
 import torch.nn.functional as F
 # import model
 from torch.autograd import Variable
-
+import math
 import sys
 sys.path.append("/home/yangmingwen/first_third_person/first_third_understanding/networks/maskrcnn_benchmark/")
 
@@ -83,6 +83,7 @@ class First_Third_Net(nn.Module):
         self.bce_loss = nn.BCELoss(size_average=True)
         self.nll_loss = nn.NLLLoss(size_average=True)
         self.soft_max = torch.nn.Softmax()
+        self.max_pooling = nn.MaxPool1d(7)
 
         if with_weight_balance:
             # balance the weight from 0 - 1
@@ -96,6 +97,8 @@ class First_Third_Net(nn.Module):
         else:
             self.ce2d_loss = nn.CrossEntropyLoss(size_average=True)
         self.log_soft_max = nn.LogSoftmax()
+
+        self.constrain_loss = ConstrainLoss()
 
     def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, ignore_mask = None, video_mask = None, frame_mask = None, test_mode = False,
                 mask_loss_switch = False):
@@ -180,8 +183,14 @@ class First_Third_Net(nn.Module):
 
                 # Get channel-wise pick mask
                 channel_pick_mask = channel_pick_mask.cuda()
+                channel_pick_mask = exo_affordance_out * channel_pick_mask
+
             else:
-                channel_pick_mask = 1
+                # channel_pick_mask = 1
+                # Get the possible region
+                channel_pick_mask = self.max_pooling(exo_affordance_out.contiguous().view(exo_affordance_out.shape[0], 13 * 13, 7)).view(
+                    exo_affordance_out.shape[0], 13, 13)
+                channel_pick_mask = channel_pick_mask.unsqueeze(3).repeat(1, 1, 1, 7).cuda()
 
             # Third branch with nB x Channel(256 X 2) X 13 X 13
             input_feature = torch.cat((retina_exo_features.cuda(), retina_ego_features.cuda()), dim=1).cuda()
@@ -213,6 +222,8 @@ class First_Third_Net(nn.Module):
             # final_out_feature_filter = torch.log(torch.clamp(final_out_feature_final, min=0.00001, max=0.99999))
             mask_loss = self.ce2d_loss(final_out_feature_final.permute(0, 3, 1, 2), frame_mask).cuda()
 
+            # Constrain loss
+            constain_loss = self.constrain_loss(final_out_feature_final)
             # Final loss
             if mask_loss_switch:
                 final_loss = pose_loss + affordance_loss + mask_loss
@@ -539,6 +550,46 @@ class RegressionModel(nn.Module):
 
         return out.contiguous().view(out.shape[0], -1, 4)
 
+
+class ConstrainLoss(nn.Module):
+    def __init__(self):
+        super(ConstrainLoss, self).__init__()
+        self.grid_size = 13
+        self.z = math.exp(math.log(2 * math.pi) + 1.)
+        self.loss = 0
+
+    def forward(self, feature_input):
+        # input B * W * H * C
+        channel_size = feature_input.size()[3]
+        batch_size = feature_input.size()[0]
+        # create grid map 13 * 13
+        xv, yv = torch.meshgrid([torch.arange(0, self.grid_size), torch.arange(0, self.grid_size)])
+        # expand to feature channel grid, 13 * 13 * C
+        xv = xv.unsqueeze(2).repeat(1, 1, channel_size).cuda()
+        yv = yv.unsqueeze(2).repeat(1, 1, channel_size).cuda()
+
+        # expand dim to batch
+        xv = xv.unsqueeze(0).repeat(batch_size, 1, 1, 1).float().cuda()
+        yv = yv.unsqueeze(0).repeat(batch_size, 1, 1, 1).float().cuda()
+
+        for batch_index in range(0, batch_size):
+            for channel_index in range(0, channel_size):
+                # Calculate mass of x,y coordinate
+                xv_energy_map = xv[batch_index,:,:,channel_size] * feature_input[batch_index,:,:,channel_size]
+                mass_xv = xv_energy_map.sum() / feature_input[batch_index,:,:,channel_size].sum()
+                yv_energy_map = yv[batch_index,:,:,channel_size] * feature_input[batch_index,:,:,channel_size]
+                mass_yv = yv_energy_map.sum() / feature_input[batch_index,:,:,channel_size].sum()
+
+                # Calculate covanrance
+                x_variance = ((xv[batch_index, :, :, channel_size] - mass_xv).pow(2)).sum().float().sqrt()
+                y_variance = ((yv[batch_index, :, :, channel_size] - mass_yv).pow(2)).sum().float().sqrt()
+
+                # Det xy == 2 * pi * e (x + y)
+                det_xy = (x_variance + y_variance).pow(2) * self.z
+                # Final loss
+                self.loss += det_xy
+
+        return self.loss
 
 
 if __name__ == '__main__':
