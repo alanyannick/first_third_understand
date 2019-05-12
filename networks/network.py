@@ -224,10 +224,11 @@ class First_Third_Net(nn.Module):
 
             # Constrain loss without background
             constain_loss = self.constrain_loss(final_out_feature_final[:,:,:,:7]).cuda()
+            # constain_loss_channel_mask = self.constrain_loss(exo_affordance_out).cuda()
             # Final loss
             if mask_loss_switch:
-                final_loss = pose_loss + affordance_loss + mask_loss + constain_loss
-                self.losses['constrain_loss'] = constain_loss
+                final_loss = pose_loss + affordance_loss + mask_loss + constain_loss # + constain_loss_channel_mask
+                self.losses['constrain_loss'] = constain_loss #+ constain_loss_channel_mask
             else:
                 final_loss = pose_loss + affordance_loss
 
@@ -586,11 +587,17 @@ class ConstrainLoss(nn.Module):
                 mass_yv = yv_energy_map.sum() / feature_input[batch_index,:,:,channel_index].sum()
 
                 # Calculate covanrance
-                x_variance = ((xv[batch_index, :, :, channel_index] - mass_xv).pow(2)).sum().float().sqrt()
-                y_variance = ((yv[batch_index, :, :, channel_index] - mass_yv).pow(2)).sum().float().sqrt()
+                x_variance = (((xv[batch_index, :, :, channel_index] - mass_xv)).pow(2).float() * feature_input[batch_index,:,:,channel_index]).sum()
+                # normalize
+                x_variance = (x_variance / (feature_input[batch_index,:,:,channel_index].sum())).sqrt()
+
+                # Calculate covanrance
+                y_variance = (((yv[batch_index, :, :, channel_index] - mass_yv)).pow(2).float() * feature_input[batch_index,:,:,channel_index]).sum()
+                # normalize
+                y_variance = (y_variance / (feature_input[batch_index, :, :, channel_index].sum())).sqrt()
 
                 # Det xy == 2 * pi * e (x + y)
-                det_xy = (x_variance + y_variance).pow(2) * self.z / (self.scaling)
+                det_xy = (x_variance + y_variance) / self.scaling # .pow(2) # + self.z
                 # Final loss
                 loss += det_xy
         self.loss = loss
