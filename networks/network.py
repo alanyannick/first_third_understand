@@ -99,9 +99,15 @@ class First_Third_Net(nn.Module):
         self.log_soft_max = nn.LogSoftmax()
 
         self.constrain_loss = ConstrainLoss()
+        self.channel_contrain = False
+
+        if self.channel_contrain:
+            self.channel_constrain_loss = ConstrainLoss()
 
     def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, ignore_mask = None, video_mask = None, frame_mask = None, test_mode = False,
-                mask_loss_switch = False):
+                mask_loss_switch = False, constain_switch=False):
+        self.constrain_switch = constain_switch
+
         self.test_mode = test_mode
 
         # GroundTruth
@@ -224,11 +230,23 @@ class First_Third_Net(nn.Module):
 
             # Constrain loss without background
             constain_loss = self.constrain_loss(final_out_feature_final[:,:,:,:7]).cuda()
-            # constain_loss_channel_mask = self.constrain_loss(exo_affordance_out).cuda()
+
             # Final loss
             if mask_loss_switch:
-                final_loss = pose_loss + affordance_loss + mask_loss + constain_loss # + constain_loss_channel_mask
-                self.losses['constrain_loss'] = constain_loss #+ constain_loss_channel_mask
+                if self.channel_contrain:
+                    constain_loss_channel_mask = self.channel_constrain_loss(exo_affordance_out).cuda()
+                    final_loss = pose_loss + affordance_loss + mask_loss + constain_loss + constain_loss_channel_mask
+                    self.losses['constrain_loss'] = constain_loss + constain_loss_channel_mask
+                else:
+                    if self.constain_switch:
+                        final_loss = pose_loss + affordance_loss + mask_loss + constain_loss
+                    else:
+                        final_loss = pose_loss + affordance_loss + mask_loss
+
+                    self.losses['constrain_loss'] = constain_loss
+
+
+
             else:
                 final_loss = pose_loss + affordance_loss
 
