@@ -106,7 +106,7 @@ class First_Third_Net(nn.Module):
             self.channel_constrain_loss = ConstrainLoss()
 
     def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, ignore_mask = None, video_mask = None, frame_mask = None, test_mode = False,
-                mask_loss_switch = False, constain_switch=False):
+                mask_loss_switch = False, constain_switch=True):
         self.constrain_switch = constain_switch
 
         self.test_mode = test_mode
@@ -586,9 +586,9 @@ class RegressionModel(nn.Module):
 class ConstrainLoss(nn.Module):
     def __init__(self):
         super(ConstrainLoss, self).__init__()
-        self.grid_size = 13
+        self.grid_size = 14
         self.z = math.exp(math.log(2 * math.pi) + 1.)
-        self.scaling = 100
+        self.scaling = 1000
         self.loss = 0
         self.act = nn.Softmax()
 
@@ -599,7 +599,7 @@ class ConstrainLoss(nn.Module):
         channel_size = feature_input.size()[3]
         batch_size = feature_input.size()[0]
         # create grid map 13 * 13
-        xv, yv = torch.meshgrid([torch.arange(0, self.grid_size), torch.arange(0, self.grid_size)])
+        xv, yv = torch.meshgrid([torch.arange(1, self.grid_size), torch.arange(1, self.grid_size)])
         # expand to feature channel grid, 13 * 13 * C
         xv = xv.unsqueeze(2).repeat(1, 1, channel_size).cuda()
         yv = yv.unsqueeze(2).repeat(1, 1, channel_size).cuda()
@@ -627,7 +627,7 @@ class ConstrainLoss(nn.Module):
                 y_variance = (y_variance / (feature_input[batch_index, :, :, channel_index].sum())).sqrt()
 
                 # Det xy == 2 * pi * e (x + y)
-                det_xy = (x_variance + y_variance) / self.scaling # .pow(2) # + self.z
+                det_xy = (x_variance + y_variance).pow(2) / self.scaling # .pow(2) # + self.z
                 # Final loss
                 loss += det_xy
         self.loss = loss
