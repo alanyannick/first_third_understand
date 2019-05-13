@@ -588,9 +588,10 @@ class ConstrainLoss(nn.Module):
         super(ConstrainLoss, self).__init__()
         self.grid_size = 14
         self.z = math.exp(math.log(2 * math.pi) + 1.)
-        self.scaling = 1000
+        self.scaling = 100
         self.loss = 0
         self.act = nn.Softmax()
+        self.protect_value = 0.0001
 
     def forward(self, feature_input):
         loss = 0
@@ -612,9 +613,9 @@ class ConstrainLoss(nn.Module):
             for channel_index in range(0, channel_size):
                 # Calculate mass of x,y coordinate
                 xv_energy_map = xv[batch_index,:,:,channel_index] * feature_input[batch_index,:,:,channel_index]
-                mass_xv = xv_energy_map.sum() / feature_input[batch_index,:,:,channel_index].sum()
+                mass_xv = xv_energy_map.sum() / (feature_input[batch_index,:,:,channel_index].sum() + self.protect_value)
                 yv_energy_map = yv[batch_index,:,:,channel_index] * feature_input[batch_index,:,:,channel_index]
-                mass_yv = yv_energy_map.sum() / feature_input[batch_index,:,:,channel_index].sum()
+                mass_yv = yv_energy_map.sum() / (feature_input[batch_index,:,:,channel_index].sum() + self.protect_value)
 
                 # Calculate covanrance
                 x_variance = (((xv[batch_index, :, :, channel_index] - mass_xv)).pow(2).float() * feature_input[batch_index,:,:,channel_index]).sum()
@@ -624,7 +625,7 @@ class ConstrainLoss(nn.Module):
                 # Calculate covanrance
                 y_variance = (((yv[batch_index, :, :, channel_index] - mass_yv)).pow(2).float() * feature_input[batch_index,:,:,channel_index]).sum()
                 # normalize
-                y_variance = (y_variance / (feature_input[batch_index, :, :, channel_index].sum())).sqrt()
+                y_variance = (y_variance / (feature_input[batch_index,:,:,channel_index].sum() + self.protect_value)).sqrt()
 
                 # Det xy == 2 * pi * e (x + y)
                 det_xy = (x_variance + y_variance).pow(2) / self.scaling # .pow(2) # + self.z
