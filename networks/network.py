@@ -80,10 +80,10 @@ class First_Third_Net(nn.Module):
             self.ce_loss= nn.CrossEntropyLoss(weight=class_weights, size_average=True)
         else:
             self.ce_loss = nn.CrossEntropyLoss()
-        self.bce_loss = nn.BCELoss(size_average=True)
-        self.nll_loss = nn.NLLLoss(size_average=True)
+        self.bce_loss = nn.BCEWithLogitsLoss(size_average=True)
         self.soft_max = torch.nn.Softmax()
         self.max_pooling = nn.MaxPool1d(7)
+        self.sigmoid = nn.Sigmoid()
 
         if with_weight_balance:
             # balance the weight from 0 - 1
@@ -93,6 +93,7 @@ class First_Third_Net(nn.Module):
 
             mask_weights = torch.FloatTensor(weights_mask).cuda()
             self.ce2d_loss= nn.CrossEntropyLoss(weight=mask_weights)
+            self.nll_loss = nn.NLLLoss(weight=mask_weights)
 
         else:
             self.ce2d_loss = nn.CrossEntropyLoss(size_average=True)
@@ -154,6 +155,7 @@ class First_Third_Net(nn.Module):
         gt_video_mask = video_mask.permute(0, 2, 3, 1)
         # for binary_entropy / with out B X W X H X Class
         exo_affordance_out = self.second_exo_affordance_branch(retina_exo_features)
+        # exo_affordance_out = torch.clamp(exo_affordance_out, 0, 1)
 
         # ====================== Third Branch: ego & exo affordance
         if self.third_branch_switch:
@@ -189,7 +191,9 @@ class First_Third_Net(nn.Module):
 
                 # Get channel-wise pick mask
                 channel_pick_mask = channel_pick_mask.cuda()
-                channel_pick_mask = exo_affordance_out * channel_pick_mask
+
+                # After Sigmoid implemnt to get (0,1) weight * after softmax(0,1) pose weight
+                channel_pick_mask = self.sigmoid(exo_affordance_out) * channel_pick_mask
 
             else:
                 # channel_pick_mask = 1
@@ -206,10 +210,16 @@ class First_Third_Net(nn.Module):
             # final_out_feature = self.soft_max(final_out_feature.cuda())
             final_out_feature = final_out_feature.cuda()
 
+            #clamp
+            # final_out_feature = torch.clamp(final_out_feature, 0, 1)
+
             # Create new tensor and put the value in to solve the inplace feature problem
             final_out_feature_final = torch.zeros(final_out_feature.shape).cuda()
             final_out_feature_final[:, :, :, :7] = torch.mul(final_out_feature[:, :, :, :7], channel_pick_mask)
             final_out_feature_final[:, :, :, 7] = final_out_feature[:, :, :, 7]
+
+            #clamp
+            # final_out_feature_final = torch.clamp(final_out_feature_final, 0, 1)
 
             
         if not test_mode:
@@ -238,7 +248,7 @@ class First_Third_Net(nn.Module):
                     final_loss = pose_loss + affordance_loss + mask_loss + constain_loss + constain_loss_channel_mask
                     self.losses['constrain_loss'] = constain_loss + constain_loss_channel_mask
                 else:
-                    if self.constain_switch:
+                    if self.constrain_switch:
                         final_loss = pose_loss + affordance_loss + mask_loss + constain_loss
                     else:
                         final_loss = pose_loss + affordance_loss + mask_loss
@@ -257,7 +267,7 @@ class First_Third_Net(nn.Module):
             return final_loss
 
         else:
-            return torch.argmax(ego_pose_out, -1), exo_affordance_out, final_out_feature_final
+            return torch.argmax(ego_pose_out, -1), self.sigmoid(exo_affordance_out), final_out_feature_final
 
 
 class egoFirstBranchModel(nn.Module):
@@ -382,7 +392,7 @@ class exoSecondBranchModel(nn.Module):
         out = self.act4(out)
 
         out = self.output(out)
-        out = self.output_act(out)
+        # out = self.output_act(out)
 
         # out is B x C x W x H, with C = n_classes + n_anchors
         out1 = out.permute(0, 2, 3, 1)
@@ -427,7 +437,7 @@ class ThirdBranchModel(nn.Module):
         out = self.act4(out)
 
         out = self.output(out)
-        out = self.output_act(out)
+        # out = self.output_act(out)
 
         # out is B x C x W x H, with C = n_classes + n_anchors
         out1 = out.permute(0, 2, 3, 1)
@@ -580,9 +590,11 @@ class ConstrainLoss(nn.Module):
         self.z = math.exp(math.log(2 * math.pi) + 1.)
         self.scaling = 100
         self.loss = 0
+        self.act = nn.Softmax()
 
     def forward(self, feature_input):
         loss = 0
+        feature_input = self.act(feature_input)
         # input B * W * H * C
         channel_size = feature_input.size()[3]
         batch_size = feature_input.size()[0]
