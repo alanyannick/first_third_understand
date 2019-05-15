@@ -598,7 +598,7 @@ class ConstrainLoss(nn.Module):
         super(ConstrainLoss, self).__init__()
         self.grid_size = 14
         self.z = math.exp(math.log(2 * math.pi) + 1.)
-        self.scaling = 100
+        self.scaling = 1000
         self.loss = 0
         self.act = nn.Softmax(dim=3)
         self.protect_value = 0.000001
@@ -631,19 +631,19 @@ class ConstrainLoss(nn.Module):
                 # ((X - Xmean)^2 * k_weight).sum() / k_weight.sum()
                 x_variance = (((xv[batch_index, :, :, channel_index] - mass_xv)).pow(2).float() * feature_input[batch_index,:,:,channel_index]).sum()
                 # normalize
-                x_variance = (x_variance / (feature_input[batch_index,:,:,channel_index].sum()))
+                x_variance = (x_variance / 169 / (feature_input[batch_index,:,:,channel_index].sum() + self.protect_value))
 
                 # Calculate covanrance
                 # # ((Y - Ymean)^2 * y_weight).sum() / k_weight.sum()
                 y_variance = (((yv[batch_index, :, :, channel_index] - mass_yv)).pow(2).float() * feature_input[batch_index,:,:,channel_index]).sum()
                 # normalize
-                y_variance = (y_variance / (feature_input[batch_index,:,:,channel_index].sum() + self.protect_value))
+                y_variance = (y_variance / 169 / (feature_input[batch_index,:,:,channel_index].sum() + self.protect_value))
 
                 # Det xy == 2 * pi * e * (x + y) ^2 / (scaling_factor) * self.z (math.exp(math.log(2*math.pi) + 1.))
-                det_xy = (x_variance + y_variance).pow(2) * self.z / self.scaling # .pow(2) # + self.z
+                det_xy = (x_variance + y_variance).pow(2) * self.z # .pow(2) # + self.z
                 # Final loss
                 loss += det_xy
-        self.loss = loss
+        self.loss = loss / batch_size / channel_size
         return self.loss
 
 
