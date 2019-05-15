@@ -81,9 +81,9 @@ def sv_augmentation(img, scene_img, scene_gt_img, fraction):
 class load_images_and_labels():  # for training
     def __init__(self, path, batch_size=1, img_size=608, multi_scale=False, augment=False, shuffle_switch=True,
                  center_crop=False,
-                 video_mask='/home/yangmingwen/first_third_person/merged_clusters/per_video_gt_merged_train.pickle',
-                 ignore_mask='/home/yangmingwen/first_third_person/merged_clusters/ignore_mask_merged_train.pickle',
-                 frame_mask='/home/yangmingwen/first_third_person/merged_clusters/final_branch_gt_merged.pickle'):
+                 video_mask='/home/yangmingwen/first_third_person/nips_final_data/nips_data/per_video_gt_merged_train_nips.pickle',
+                 ignore_mask='/home/yangmingwen/first_third_person/nips_final_data/nips_data/ignore_mask_merged_train_nips.pickle',
+                 frame_mask='/home/yangmingwen/first_third_person/nips_final_data/nips_data/final_nips_third_branch.pickle'):
         self.path = path
         # self.img_files = sorted(glob.glob('%s/*.*' % path))
         with open(path, 'r') as file:
@@ -342,15 +342,19 @@ class load_images_and_labels():  # for training
 
                 scene_img = scene_img[:, y_crop2:y_crop2 + 800, x_crop2:x_crop2 + 800]
                 scene_gt_img = scene_gt_img[:, y_crop2:y_crop2 + 800, x_crop2:x_crop2 + 800]
+
+                # @TODO ix bug temporally for 13x13 input (should be 16*16 for video mask)
+                self.per_video_mask = cv2.resize(self.per_video_mask.transpose(1,2,0), (16,16), interpolation=cv2.INTER_NEAREST).transpose(2,0,1)
                 self.per_video_mask = self.per_video_mask[:,y_crop3:y_crop3 + 13, x_crop3:x_crop3 + 13]
+                
                 self.per_video_ignore_mask = self.per_video_ignore_mask[y_crop3:y_crop3 + 13, x_crop3:x_crop3 + 13]
 
                 if frame_flag:
                     self.per_frame_mask = per_frame_mask[:, y_crop3:y_crop3 + 13, x_crop3:x_crop3 + 13]
             else:
                 if frame_flag:
-                    self.per_frame_mask = cv2.resize(per_frame_mask, (13, 13))
-                    self.per_video_ignore_mask = cv2.resize(self.per_video_ignore_mask,(13, 13))
+                    self.per_frame_mask = cv2.resize(per_frame_mask, (13, 13), interpolation=cv2.INTER_NEAREST)
+                    self.per_video_ignore_mask = cv2.resize(self.per_video_ignore_mask,(13, 13), interpolation=cv2.INTER_NEAREST)
 
             # Load labels and transfer it from CxCyWH to LxLyRxRy
             if os.path.isfile(label_path):
