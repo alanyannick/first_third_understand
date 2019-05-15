@@ -159,7 +159,7 @@ class First_Third_Net(nn.Module):
 
         # ====================== Third Branch: ego & exo affordance
         if self.third_branch_switch:
-            pick_mask = True
+            pick_mask = False
             if pick_mask:
                 # Create channel_weight_mask firstly
                 channel_pick_mask = torch.zeros(self.exo_rgb.shape[0], 13, 13, 7).cuda()
@@ -196,11 +196,11 @@ class First_Third_Net(nn.Module):
                 channel_pick_mask = self.sigmoid(exo_affordance_out) * channel_pick_mask
 
             else:
-                # channel_pick_mask = 1
+                channel_pick_mask = 1
                 # Get the possible region
-                channel_pick_mask = self.max_pooling(exo_affordance_out.contiguous().view(exo_affordance_out.shape[0], 13 * 13, 7)).view(
-                    exo_affordance_out.shape[0], 13, 13)
-                channel_pick_mask = channel_pick_mask.unsqueeze(3).repeat(1, 1, 1, 7).cuda()
+                # channel_pick_mask = self.max_pooling(exo_affordance_out.contiguous().view(exo_affordance_out.shape[0], 13 * 13, 7)).view(
+                #     exo_affordance_out.shape[0], 13, 13)
+                # channel_pick_mask = channel_pick_mask.unsqueeze(3).repeat(1, 1, 1, 7).cuda()
 
             # Third branch with nB x Channel(256 X 2) X 13 X 13
             input_feature = torch.cat((retina_exo_features.cuda(), retina_ego_features.cuda()), dim=1).cuda()
@@ -217,6 +217,7 @@ class First_Third_Net(nn.Module):
             final_out_feature_final = torch.zeros(final_out_feature.shape).cuda()
             final_out_feature_final[:, :, :, :7] = torch.mul(final_out_feature[:, :, :, :7], channel_pick_mask)
             final_out_feature_final[:, :, :, 7] = final_out_feature[:, :, :, 7]
+            # final_out_feature_final[:, :, :, 7] = torch.mul(final_out_feature[:, :, :, 7], (1 - channel_pick_mask.mean()))
 
             #clamp
             # final_out_feature_final = torch.clamp(final_out_feature_final, 0, 1)
@@ -236,8 +237,15 @@ class First_Third_Net(nn.Module):
             # Mask loss
             # Final feature
             # final_out_feature_filter = torch.log(torch.clamp(final_out_feature_final, min=0.00001, max=0.99999))
-            mask_loss = self.ce2d_loss(final_out_feature_final.permute(0, 3, 1, 2), frame_mask).cuda()
 
+            # Debuging
+            mask_loss = self.ce2d_loss(final_out_feature_final.permute(0, 3, 1, 2), frame_mask).cuda()
+            # print('min: value')
+            # print(frame_mask.min())
+            # print('max: value')
+            # print(frame_mask.max())
+            if mask_loss > 5:
+                print('debug')
             # Constrain loss without background
             constain_loss = self.constrain_loss(final_out_feature_final[:,:,:,:7]).cuda()
 
@@ -591,7 +599,7 @@ class ConstrainLoss(nn.Module):
         self.scaling = 100
         self.loss = 0
         self.act = nn.Softmax()
-        self.protect_value = 0.0001
+        self.protect_value = 0.000001
 
     def forward(self, feature_input):
         loss = 0
@@ -618,17 +626,19 @@ class ConstrainLoss(nn.Module):
                 mass_yv = yv_energy_map.sum() / (feature_input[batch_index,:,:,channel_index].sum() + self.protect_value)
 
                 # Calculate covanrance
+                # ((X - Xmean)^2 * k_weight).sum() / k_weight.sum()
                 x_variance = (((xv[batch_index, :, :, channel_index] - mass_xv)).pow(2).float() * feature_input[batch_index,:,:,channel_index]).sum()
                 # normalize
-                x_variance = (x_variance / (feature_input[batch_index,:,:,channel_index].sum())).sqrt()
+                x_variance = (x_variance / (feature_input[batch_index,:,:,channel_index].sum()))
 
                 # Calculate covanrance
+                # # ((Y - Ymean)^2 * y_weight).sum() / k_weight.sum()
                 y_variance = (((yv[batch_index, :, :, channel_index] - mass_yv)).pow(2).float() * feature_input[batch_index,:,:,channel_index]).sum()
                 # normalize
-                y_variance = (y_variance / (feature_input[batch_index,:,:,channel_index].sum() + self.protect_value)).sqrt()
+                y_variance = (y_variance / (feature_input[batch_index,:,:,channel_index].sum() + self.protect_value))
 
-                # Det xy == 2 * pi * e (x + y)
-                det_xy = (x_variance + y_variance).pow(2) / self.scaling # .pow(2) # + self.z
+                # Det xy == 2 * pi * e * (x + y) ^2 / (scaling_factor) * self.z (math.exp(math.log(2*math.pi) + 1.))
+                det_xy = (x_variance + y_variance).pow(2) * self.z / self.scaling # .pow(2) # + self.z
                 # Final loss
                 loss += det_xy
         self.loss = loss
