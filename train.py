@@ -60,7 +60,7 @@ def train(
     num_classes = int(data_config['classes'])
     train_path = data_config['train']
     pickle_video_mask = data_config['pickle_video_mask_train']
-    pickle_ignore_mask = data_config['pickle_ignore_mask_train']
+    # pickle_ignore_mask = data_config['pickle_ignore_mask_train']
 
     # Initialize model
     # here, for the rgb is 416 = 32 by 13 but for the classifier is 13 by 13
@@ -75,8 +75,7 @@ def train(
     # Get dataloader
     dataloader = load_images_and_labels(train_path, batch_size=batch_size, img_size=img_size,
                                         multi_scale=multi_scale, augment=False, center_crop=True,
-                                        video_mask=pickle_video_mask,
-                                        ignore_mask=pickle_ignore_mask)
+                                        video_mask=pickle_video_mask)
 
     lr0 = 0.001
     if resume:
@@ -133,7 +132,7 @@ def train(
 
         # @TODO Important Switch Here (Default Loss)
         current_mask_loss_switch = True
-        constain_switch = True
+        constain_switch = False
 
         if epoch > 1:
             lr = lr0 / 10
@@ -166,18 +165,18 @@ def train(
         file = open(os.path.join(weights_path, 'weights_results.txt'), 'a')
         file.write(str(weights_path))
 
-        for i, (imgs, targets, scenes, scenes_gt, ignore_mask, video_mask, frame_mask) in enumerate(dataloader):
+        for i, (imgs, targets, scenes, scenes_gt, video_mask, frame_mask) in enumerate(dataloader):
             if sum([len(x) for x in targets]) < 1:  # if no targets continue
                 continue
 
             # Switch > 2400 warm up affordance
             if i > 2400:
-                constain_switch = True
+                constain_switch = False
 
             print('Current_lr:' + str(lr))
 
             # Compute loss, compute gradient, update parameters
-            loss = model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask, frame_mask, mask_loss_switch=current_mask_loss_switch, constain_switch=constain_switch)
+            loss = model(imgs, scenes, scenes_gt, targets, video_mask, frame_mask, mask_loss_switch=current_mask_loss_switch, constain_switch=constain_switch)
             loss.backward()
 
             # drawing_bbox_gt(input=model.exo_rgb, bbox=gt_bbox, label=gt_label, name='gt_', vis=vis)

@@ -82,7 +82,6 @@ class load_images_and_labels():  # for training
     def __init__(self, path, batch_size=1, img_size=608, multi_scale=False, augment=False, shuffle_switch=True,
                  center_crop=False,
                  video_mask='/home/yangmingwen/first_third_person/nips_final_data/nips_data/per_video_gt_merged_train_nips.pickle',
-                 ignore_mask='/home/yangmingwen/first_third_person/nips_final_data/nips_data/ignore_mask_merged_train_nips.pickle',
                  frame_mask='/home/yangmingwen/first_third_person/nips_final_data/nips_data/final_nips_third_branch.pickle'):
         self.path = path
         # self.img_files = sorted(glob.glob('%s/*.*' % path))
@@ -156,10 +155,11 @@ class load_images_and_labels():  # for training
             with open(video_mask, 'rb') as gt_handle:
                 gt_per_video_mask = pickle.load(gt_handle)
                 self.gt_video_mask = gt_per_video_mask
-            with open(ignore_mask,
-                          'rb') as ignore_handle:
-                ignore_per_video_mask = pickle.load(ignore_handle)
-                self.ignore_video_mask = ignore_per_video_mask
+
+            # with open(ignore_mask,
+            #               'rb') as ignore_handle:
+            #     ignore_per_video_mask = pickle.load(ignore_handle)
+            #     self.ignore_video_mask = ignore_per_video_mask
 
 
     def __iter__(self):
@@ -187,7 +187,7 @@ class load_images_and_labels():  # for training
         scene_all = []
         scene_gt_all = []
         frame_mask = []
-        ignore_mask = []
+        # ignore_mask = []
         video_mask = []
 
         for index, files_index in enumerate(range(ia, ib)):
@@ -230,12 +230,12 @@ class load_images_and_labels():  # for training
                 video_tag = img_path.split(img_path.split('-')[-1])[0].split('/')[-1].split('first')[0]
                 try:
                     self.per_video_mask = self.gt_video_mask[video_tag]
-                    self.per_video_ignore_mask = self.ignore_video_mask[video_tag]
+                    # self.per_video_ignore_mask = self.ignore_video_mask[video_tag]
                 except:
-                    print('Test_Mode: Do not care about the gt_video_mask')
+                    print('Test_Mode: Do not care about the gt_video_mask'+video_tag)
                     video_tag = '0EU2AEGO_1_'
                     self.per_video_mask = self.gt_video_mask[video_tag]
-                    self.per_video_ignore_mask = self.ignore_video_mask[video_tag]
+                    # self.per_video_ignore_mask = self.ignore_video_mask[video_tag]
 
             # Input ego/exo/gt_exo
             # Ego 64 frames for I3D
@@ -251,7 +251,7 @@ class load_images_and_labels():  # for training
                 img_i3d = cv2.imread(img_path_iter)
 
                 if img_i3d is None:
-                    assert "cannot find the image" + img_path_iter
+                    print("cannot find the image" + img_path_iter)
                     # solve the -1 and > index video
                     previous_path_iter = img_path.replace(str(img_index), str(img_index_iter + 1))
 
@@ -290,7 +290,7 @@ class load_images_and_labels():  # for training
                 img_i3d = cv2.imread(img_path_iter)
 
                 if img_i3d is None:
-                    assert "cannot find the image" + img_path_iter
+                    print("cannot find the image" + img_path_iter)
                     # solve the -1 and > index video
                     previous_path_iter = img_path.replace(str(img_index), str(img_index_iter - 1))
                     prev_img = cv2.imread(previous_path_iter)
@@ -346,15 +346,15 @@ class load_images_and_labels():  # for training
                 # @TODO ix bug temporally for 13x13 input (should be 16*16 for video mask)
                 self.per_video_mask = cv2.resize(self.per_video_mask.transpose(1,2,0), (16,16), interpolation=cv2.INTER_NEAREST).transpose(2,0,1)
                 self.per_video_mask = self.per_video_mask[:,y_crop3:y_crop3 + 13, x_crop3:x_crop3 + 13]
-                
-                self.per_video_ignore_mask = self.per_video_ignore_mask[y_crop3:y_crop3 + 13, x_crop3:x_crop3 + 13]
+
+                # self.per_video_ignore_mask = self.per_video_ignore_mask[y_crop3:y_crop3 + 13, x_crop3:x_crop3 + 13]
 
                 if frame_flag:
                     self.per_frame_mask = per_frame_mask[:, y_crop3:y_crop3 + 13, x_crop3:x_crop3 + 13]
             else:
                 if frame_flag:
                     self.per_frame_mask = cv2.resize(per_frame_mask, (13, 13), interpolation=cv2.INTER_NEAREST)
-                    self.per_video_ignore_mask = cv2.resize(self.per_video_ignore_mask,(13, 13), interpolation=cv2.INTER_NEAREST)
+                    # self.per_video_ignore_mask = cv2.resize(self.per_video_ignore_mask,(13, 13), interpolation=cv2.INTER_NEAREST)
 
             # Load labels and transfer it from CxCyWH to LxLyRxRy
             if os.path.isfile(label_path):
@@ -397,16 +397,18 @@ class load_images_and_labels():  # for training
             labels_all.append(labels)
             scene_all.append(scene_img)
             scene_gt_all.append(scene_gt_img)
-            ignore_mask.append(self.per_video_ignore_mask)
+            # ignore_mask.append(self.per_video_ignore_mask)
             video_mask.append(self.per_video_mask)
             frame_mask.append(self.per_frame_mask)
 
         # Transfer the label as contin
         labels_all = np.ascontiguousarray(labels_all, dtype=np.float32)
-
-        # np.array img all will change it to 12 * 64 * 224 * 224 * 3 then transpose to 12 * 3 * 64 * 224 * 224
-        return np.array(img_all).transpose(0, 4, 1, 2, 3), labels_all, scene_all, scene_gt_all, ignore_mask, video_mask, frame_mask
-        #         scene_all), torch.from_numpy(scene_gt_all)
+        try:
+            # np.array img all will change it to 12 * 64 * 224 * 224 * 3 then transpose to 12 * 3 * 64 * 224 * 224
+            return np.array(img_all).transpose(0, 4, 1, 2, 3), labels_all, scene_all, scene_gt_all, video_mask, frame_mask
+            #         scene_all), torch.from_numpy(scene_gt_all)
+        except:
+            print('debug here something wrong happened / 411 line of datasets')
 
 
     def __len__(self):

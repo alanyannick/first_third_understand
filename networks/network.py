@@ -107,7 +107,7 @@ class First_Third_Net(nn.Module):
         if self.channel_contrain:
             self.channel_constrain_loss = ConstrainLoss()
 
-    def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, ignore_mask = None, video_mask = None, frame_mask = None, test_mode = False,
+    def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, video_mask = None, frame_mask = None, test_mode = False,
                 mask_loss_switch = False, constain_switch=True):
         self.constrain_switch = constain_switch
 
@@ -151,7 +151,7 @@ class First_Third_Net(nn.Module):
         # Size 1 x 256 x 13 x13
         retina_exo_features = self.merge_feature(exo_feature_1, exo_feature_2, exo_feature_3).cuda()
         # get the mask_tensor here
-        ignore_mask = torch.from_numpy(np.array(ignore_mask)).float().cuda()
+        # ignore_mask = torch.from_numpy(np.array(ignore_mask)).float().cuda()
         frame_mask = torch.from_numpy(np.array(frame_mask)).squeeze(1).long().cuda()#type(torch.cuda.LongTensor)
         video_mask = torch.from_numpy(np.array(video_mask)).float().cuda()
         gt_video_mask = video_mask.permute(0, 2, 3, 1)

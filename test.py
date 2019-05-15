@@ -54,12 +54,12 @@ def test(
     if testing_data == True:
         test_path = data_config['valid']
         pickle_video_mask = data_config['pickle_video_mask_test']
-        pickle_ignore_mask = data_config['pickle_ignore_mask_test']
+        # pickle_ignore_mask = data_config['pickle_ignore_mask_test']
         pickle_frame_mask = data_config['pickle_frame_mask_test']
     else:
         test_path = data_config['valid2']
         pickle_video_mask = data_config['pickle_video_mask_train']
-        pickle_ignore_mask = data_config['pickle_ignore_mask_train']
+        # pickle_ignore_mask = data_config['pickle_ignore_mask_train']
         pickle_frame_mask = '/home/yangmingwen/first_third_person/merged_clusters/final_branch_gt_merged.pickle'
 
     # Initiate model
@@ -81,8 +81,7 @@ def test(
                                         img_size=img_size, augment=False, shuffle_switch=shuffle_switch,
                                         center_crop=center_crop,
                                         video_mask=pickle_video_mask,
-                                        ignore_mask=pickle_ignore_mask,
-                                        frame_mask=pickle_frame_mask,
+                                        frame_mask=pickle_frame_mask
                                         )
 
     print('%11s' * 5 % ('Image', 'Total', 'P', 'R', 'mAP'))
@@ -105,7 +104,7 @@ def test(
         total_classes.append(0)
 
     if scene_flag:
-        for batch_i, (imgs, targets, scenes, scenes_gt, ignore_mask, video_mask, frame_mask) in enumerate(dataloader):
+        for batch_i, (imgs, targets, scenes, scenes_gt, video_mask, frame_mask) in enumerate(dataloader):
             total_count += 1
             if batch_i > 300:
                 break
@@ -113,16 +112,16 @@ def test(
                 if worker == 'detection':
                     output = model(imgs.cuda())
                 else:
-                    pose_label, pose_affordance, frame_affordance= model(imgs, scenes, scenes_gt, targets, ignore_mask, video_mask, frame_mask, test_mode=True)
+                    pose_label, pose_affordance, frame_affordance= model(imgs, scenes, scenes_gt, targets, video_mask, frame_mask, test_mode=True)
                     predict_pose_label = pose_label.cpu().float().numpy()[0]
                     gt_pose_label = np.array(targets[0][0][0])
 
                     # Bilinear version
-                    sem_frame_affordance_mask = torch.argmax(F.interpolate(frame_affordance.permute(0, 3, 1, 2), size=(800, 800), mode='bilinear').
-                                                             permute(0, 2, 3, 1), dim=3).cpu().float().numpy()[0] + 24
+                    # sem_frame_affordance_mask = torch.argmax(F.interpolate(frame_affordance.permute(0, 3, 1, 2), size=(800, 800), mode='bilinear').
+                                                           #  permute(0, 2, 3, 1), dim=3).cpu().float().numpy()[0] + 24
                     # Masaic verison
-                    # sem_frame_affordance_mask = cv2.resize(
-                    #     torch.argmax(frame_affordance, dim=3).cpu().float().numpy()[0], (800, 800), interpolation=cv2.INTER_NEAREST) + 24
+                    sem_frame_affordance_mask = cv2.resize(
+                        torch.argmax(frame_affordance, dim=3).cpu().float().numpy()[0], (800, 800), interpolation=cv2.INTER_NEAREST) + 24
 
                     gt_sem_frame_affordance_mask = cv2.resize(frame_mask[0][0], (800, 800), interpolation=cv2.INTER_NEAREST) + 24
 
@@ -279,9 +278,10 @@ def test(
                                                            img=(sem_frame_mask))
 
                         frame_heat_affordance = frame_affordance.clone()
-                        soft_max_func = nn.Softmax(dim=3)
+
+
                         sem_frame_affordance = cv2.resize(
-                            torch.max(frame_heat_affordance/(frame_heat_affordance.max()), dim=3)[0].cpu().float().numpy()[0], (800, 800))
+                            torch.max(frame_heat_affordance, dim=3)[0].cpu().float().numpy()[0], (800, 800))
                         sem_heatmap = cv2.applyColorMap(np.uint8(sem_frame_affordance * 255)
                                                     , cv2.COLORMAP_JET)
                         sem_heatmap_final = np.uint8(sem_heatmap * 0.3 + np.transpose((scenes[0] + 128).cpu().float().numpy(), (1, 2, 0)) * 0.6)
@@ -311,14 +311,14 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weight_retina_05_11_Pose_Affordance_bp_3_lr_0.001/latest.pt', help='path to weights file')
+    parser.add_argument('--weights', type=str, default='weight_retina_05_18_Pose_Affordance_Third/latest.pt', help='path to weights file')
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
-    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/weight_retina_05_11_Pose_Affordance_bp_3_lr_0.001-test4/', help='cfg file path')
+    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/weight_retina_05_18_Pose_Affordance_Third/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
-    parser.add_argument('--testing_data_mode', type=bool, default=True, help='using testing or training data')
-    parser.add_argument('--affordance_mode', type=bool, default=False, help='using testing or training data')
+    parser.add_argument('--testing_data_mode', type=bool, default=False, help='using testing or training data')
+    parser.add_argument('--affordance_mode', type=bool, default=True, help='using testing or training data')
     parser.add_argument('--center_crop', type=bool, default=False, help='using testing or training data')
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='path to model config file')
     opt = parser.parse_args()
