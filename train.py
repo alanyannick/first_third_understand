@@ -130,12 +130,14 @@ def train(
         # scheduler.step()
         # Update scheduler (manual)  at 0, 54, 61 epochs to 1e-3, 1e-4, 1e-5
 
+
+        # @TODO Important Switch Here (Default Loss)
         current_mask_loss_switch = True
-        constain_switch = False
+        constain_switch = True
+
         if epoch > 1:
             lr = lr0 / 10
             mask_loss_switch = True
-            constain_switch = True
             current_mask_loss_switch = mask_loss_switch
         elif epoch > 5:
             lr = lr0 / 100
@@ -160,16 +162,17 @@ def train(
 
         optimizer.zero_grad()
 
+        # write loss file
+        file = open(os.path.join(weights_path, 'weights_results.txt'), 'a')
+        file.write(str(weights_path))
+
         for i, (imgs, targets, scenes, scenes_gt, ignore_mask, video_mask, frame_mask) in enumerate(dataloader):
             if sum([len(x) for x in targets]) < 1:  # if no targets continue
                 continue
 
-            # SGD burn-in
-            # if (epoch == 0) & (i <= 100):
-            #     lr = lr0 * (i / 1000) ** 4
-            #     for g in optimizer.param_groups:
-            #         g['lr'] = lr
-            #     print('Current_lr:' + str(lr))
+            # Switch > 2400 warm up affordance
+            if i > 2400:
+                constain_switch = True
 
             print('Current_lr:' + str(lr))
 
@@ -216,6 +219,11 @@ def train(
             # if loss_per_target < best_loss:
             #     best_loss = loss_per_target
             # Save backup weights every 5 epochs
+
+            # Write epoch results
+            file.write(str(s))
+            file.write('\n')
+
             if (epoch > 0) & (epoch % 2 == 0):
                 backup_file_name = 'backup{}.pt'.format(epoch)
                 backup_file_path = os.path.join(weights_path, backup_file_name)
@@ -224,21 +232,8 @@ def train(
                     backup_file_path,
                 ))
                 print('Save Model Backup')
-                # @TODO: Real Time Test Script
-                # Calculate mAP
-                # mAP, R, P = test.test(
-                #     net_config_path,
-                #     data_config_path,
-                #     latest_weights_file,
-                #     batch_size=batch_size,
-                #     img_size=img_size,
-                #     gpu_choice=gpu_id,
-                #     worker='first'
-                # )
-                # Write epoch results
-                # with open('results.txt', 'a') as file:
-                #     file.write(s + '%11.3g' * 3 % (mAP, P, R) + '\n')
-            if i % 800 == 0:
+
+            if i % 500 == 0:
                 # Save latest checkpoint
                 checkpoint = {'epoch': i,
                               'best_loss': best_loss,
@@ -248,7 +243,7 @@ def train(
                 tmp_weights_file = os.path.join(weights_path, 'tmp'+str(i)+'.pt')
                 torch.save(checkpoint, latest_weights_file)
 
-            if i % 3200 == 0:
+            if i % 1000 == 0:
                 # Save tmp checkpoint
                 checkpoint = {'epoch': i,
                               'best_loss': best_loss,
@@ -265,6 +260,8 @@ def train(
                       'optimizer': optimizer.state_dict()}
         torch.save(checkpoint, best_weights_file)
         print('Save Model Best')
+
+        # file.close()
 
 
 
