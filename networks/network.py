@@ -81,9 +81,12 @@ class First_Third_Net(nn.Module):
         else:
             self.ce_loss = nn.CrossEntropyLoss()
         self.bce_loss = nn.BCEWithLogitsLoss(size_average=True)
-        self.soft_max = torch.nn.Softmax()
+        self.soft_max = torch.nn.Softmax(dim=1)
         self.max_pooling = nn.MaxPool1d(7)
         self.sigmoid = nn.Sigmoid()
+
+        # Important here with the 1x W x H x 8(3)
+        self.mask_soft_max = torch.nn.LogSoftmax(dim=3)
 
         if with_weight_balance:
             # balance the weight from 0 - 1
@@ -97,7 +100,6 @@ class First_Third_Net(nn.Module):
 
         else:
             self.ce2d_loss = nn.CrossEntropyLoss(size_average=True)
-        self.log_soft_max = nn.LogSoftmax()
 
         self.constrain_loss = ConstrainLoss()
         self.channel_contrain = False
@@ -159,7 +161,7 @@ class First_Third_Net(nn.Module):
 
         # ====================== Third Branch: ego & exo affordance
         if self.third_branch_switch:
-            pick_mask = False
+            pick_mask = True
             if pick_mask:
                 # Create channel_weight_mask firstly
                 channel_pick_mask = torch.zeros(self.exo_rgb.shape[0], 13, 13, 7).cuda()
@@ -275,7 +277,7 @@ class First_Third_Net(nn.Module):
             return final_loss
 
         else:
-            return torch.argmax(ego_pose_out, -1), self.sigmoid(exo_affordance_out), final_out_feature_final
+            return torch.argmax(ego_pose_out, -1), self.sigmoid(exo_affordance_out), self.mask_soft_max(final_out_feature_final)
 
 
 class egoFirstBranchModel(nn.Module):
@@ -598,7 +600,7 @@ class ConstrainLoss(nn.Module):
         self.z = math.exp(math.log(2 * math.pi) + 1.)
         self.scaling = 100
         self.loss = 0
-        self.act = nn.Softmax()
+        self.act = nn.Softmax(dim=3)
         self.protect_value = 0.000001
 
     def forward(self, feature_input):
