@@ -1,7 +1,7 @@
 import os
 import pickle
 import collections, numpy
-frame_mask='/home/yangmingwen/first_third_person/merged_clusters/final_branch_gt_merged.pickle'
+frame_mask='/home/yangmingwen/first_third_person/nips_final_data/nips_data/final_nips_third_branch.pickle'
 
 total_count = 0
 count_bg = 0
@@ -34,6 +34,8 @@ with open(frame_mask, 'rb') as gt_handle:
         # print(numpy.count_nonzero(gt_per_frame_mask[index] < 8))
     print('weight: from 0 - -1')
     print(count_0/total_count)
+    print('  ')
+    print(count_1/total_count)
     print('  ')
     print(count_2/total_count)
     print('  ')
