@@ -393,16 +393,23 @@ class load_images_and_labels():  # for training
                 scene_gt_img = scene_gt_img[:, y_crop2:y_crop2 + 800, x_crop2:x_crop2 + 800]
 
                 # @TODO ix bug temporally for 13x13 input (should be 16*16 for video mask)
-                self.per_video_mask = cv2.resize(self.per_video_mask.transpose(1,2,0), (16,16), interpolation=cv2.INTER_NEAREST).transpose(2,0,1)
+                # self.per_video_mask = cv2.resize(self.per_video_mask.transpose(1,2,0), (16,16), interpolation=cv2.INTER_NEAREST).transpose(2,0,1)
                 self.per_video_mask = self.per_video_mask[:,y_crop3:y_crop3 + 13, x_crop3:x_crop3 + 13]
 
                 # self.per_video_ignore_mask = self.per_video_ignore_mask[y_crop3:y_crop3 + 13, x_crop3:x_crop3 + 13]
 
                 if frame_flag:
+                    # @todo:5.14 Check for the futher implement
                     self.per_frame_mask = per_frame_mask[:, y_crop3:y_crop3 + 13, x_crop3:x_crop3 + 13]
             else:
                 if frame_flag:
-                    self.per_frame_mask = cv2.resize(per_frame_mask, (13, 13), interpolation=cv2.INTER_NEAREST)
+                    # self.per_frame_mask = np.expand_dims(cv2.resize(per_frame_mask.transpose(1, 2, 0), (13, 13), interpolation=cv2.INTER_NEAREST), axis=0)
+                    self.per_frame_mask = per_frame_mask[:, 3:3 + 13, 3:3 + 13]
+                    # print("min:"+str(per_frame_mask.min()))
+                    if per_frame_mask.min() == 7:
+                        print(frame_tag)
+
+                    # self.per_frame_mask = cv2.resize(per_frame_mask, (13, 13), interpolation=cv2.INTER_NEAREST)
                     # self.per_video_ignore_mask = cv2.resize(self.per_video_ignore_mask,(13, 13), interpolation=cv2.INTER_NEAREST)
 
             # Load labels and transfer it from CxCyWH to LxLyRxRy
