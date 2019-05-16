@@ -21,6 +21,30 @@ from torchvision import transforms as T
 import torchvision.transforms as transforms
 
 
+def process_index_minus(img_index_iter, img_index):
+    img_index_iter = str(int(img_index_iter) - 1)
+    # src_name = '00000.jpg' | input_name = '000'
+    init_index = 5 - len(str(img_index_iter))
+    final_index_name = list(img_index)
+    start_index = 0
+    for index in range(init_index, 5):
+        final_index_name[index] = img_index_iter[start_index]
+        start_index += 1
+    final_replace_name = ''.join(str(e) for e in final_index_name)
+    return final_replace_name
+
+def process_index_plus(img_index_iter, img_index):
+    img_index_iter = str(int(img_index_iter) + 1)
+    # src_name = '00000.jpg' | input_name = '000'
+    init_index = 5 - len(str(img_index_iter))
+    final_index_name = list(img_index)
+    start_index = 0
+    for index in range(init_index, 5):
+        final_index_name[index] = img_index_iter[start_index]
+        start_index += 1
+    final_replace_name = ''.join(str(e) for e in final_index_name)
+    return final_replace_name
+
 def normalize_img(img_all):
     img_all = np.stack(img_all)[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB and cv2 to pytorch
     img_all = np.ascontiguousarray(img_all, dtype=np.float32)
@@ -241,19 +265,29 @@ class load_images_and_labels():  # for training
             # Ego 64 frames for I3D
             img = []
             img_name = img_path.split('/')[-1].split('first-')[-1]
-            img_index = int(img_name.split('.jpg')[0])
+            img_index = str(img_name.split('.jpg')[0])
+            img_index_value = int(img_index)
 
             for index_value in range(0,-32,-1):
                 # (0, -31)
+                img_index_iter = str(img_index_value + index_value)
+                # src_name = '00000.jpg' | input_name = '000'
+                init_index = 5 - len(str(img_index_iter))
+                final_index_name = list(img_index)
+                start_index = 0
+                for index in range(init_index, 5):
+                    final_index_name[index] = img_index_iter[start_index]
+                    start_index += 1
+                final_replace_name = ''.join(str(e) for e in final_index_name)
 
-                img_index_iter = img_index + index_value
-                img_path_iter = img_path.replace(str(img_index), str(img_index_iter))
+                img_path_iter = img_path.replace(str(img_index), final_replace_name)
                 img_i3d = cv2.imread(img_path_iter)
 
                 if img_i3d is None:
                     print("cannot find the image" + img_path_iter)
                     # solve the -1 and > index video
-                    previous_path_iter = img_path.replace(str(img_index), str(img_index_iter + 1))
+                    final_replace_name = process_index_plus(img_index_iter, img_index)
+                    previous_path_iter = img_path.replace(str(img_index), final_replace_name)
 
                     #@TODO Could be optimized with the "isDir"
                     prev_img = cv2.imread(previous_path_iter)
@@ -264,15 +298,16 @@ class load_images_and_labels():  # for training
                         break_i = 0
                         while prev_img is None:
                             break_i += 1
-                            previous_path_iter = img_path.replace(str(img_index), str(img_index_iter + 1))
-                            img_index_iter = img_index_iter + 1
-                            if img_index_iter > img_index:
+                            final_replace_name = process_index_plus(img_index_iter, img_index)
+                            previous_path_iter = img_path.replace(str(img_index), final_replace_name)
+                            img_index_iter = int(img_index_iter) + 1
+
+                            if int(img_index_iter) > int(img_index):
                                 print('Cannot find source image, please check' + previous_path_iter)
                             prev_img = cv2.imread(previous_path_iter)
 
                             if break_i > 100:
                                 break
-
 
                     img_i3d = prev_img
                 else:
@@ -282,17 +317,28 @@ class load_images_and_labels():  # for training
             # reverve the image
             img = img[::-1]
 
+            img_plus = []
             for index_value in range(1, 33):
                 # (1, 32)
 
-                img_index_iter = img_index + index_value
-                img_path_iter = img_path.replace(str(img_index), str(img_index_iter))
+                img_index_iter = str(img_index_value + index_value)
+                # src_name = '00000.jpg' | input_name = '000'
+                init_index = 5 - len(str(img_index_iter))
+                final_index_name = list(img_index)
+                start_index = 0
+                for index in range(init_index, 5):
+                    final_index_name[index] = img_index_iter[start_index]
+                    start_index += 1
+                final_replace_name = ''.join(str(e) for e in final_index_name)
+
+                img_path_iter = img_path.replace(str(img_index), final_replace_name)
                 img_i3d = cv2.imread(img_path_iter)
 
                 if img_i3d is None:
                     print("cannot find the image" + img_path_iter)
                     # solve the -1 and > index video
-                    previous_path_iter = img_path.replace(str(img_index), str(img_index_iter - 1))
+                    final_replace_name  = process_index_minus(img_index_iter, img_index)
+                    previous_path_iter = img_path.replace(str(img_index), final_replace_name)
                     prev_img = cv2.imread(previous_path_iter)
 
                     if prev_img is None:
@@ -300,9 +346,10 @@ class load_images_and_labels():  # for training
                         break_i = 0
                         while prev_img is None:
                             break_i += 1
-                            previous_path_iter = img_path.replace(str(img_index), str(img_index_iter - 1))
-                            img_index_iter = img_index_iter - 1
-                            if img_index_iter < img_index:
+                            final_replace_name = process_index_minus(img_index_iter, img_index)
+                            previous_path_iter = img_path.replace(str(img_index), final_replace_name)
+                            img_index_iter = int(img_index_iter) - 1
+                            if img_index_iter < int(img_index):
                                 print('Cannot find source image, please check' + previous_path_iter)
                             prev_img = cv2.imread(previous_path_iter)
 
@@ -313,8 +360,10 @@ class load_images_and_labels():  # for training
 
                 else:
                     img_i3d = img_i3d
-                img.append(img_i3d)
+                img_plus.append(img_i3d)
 
+            for i in range(0, len(img_plus)):
+                img.append(img_plus[i])
             # Normalize the ego as I3D input
             if self.center_crop:
                 for i in range(0, len(img)):
