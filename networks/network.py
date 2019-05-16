@@ -75,7 +75,7 @@ class First_Third_Net(nn.Module):
         with_weight_balance = True
         if with_weight_balance:
         # Loss definition: Adds the pre-defined class weights
-            weights = [0.375, 0.375, 1.0]
+            weights = [0.25, 0.5, 1.0]
             class_weights = torch.FloatTensor(weights).cuda()
             self.ce_loss= nn.CrossEntropyLoss(weight=class_weights, size_average=True)
         else:
@@ -90,9 +90,9 @@ class First_Third_Net(nn.Module):
 
         if with_weight_balance:
             # balance the weight from 0 - 1
-            weights_mask = [1/0.0009942434210526317 / 1000,1/0.0018601973684210526 / 1000, 1/0.0009368832236842105 /1000,
-                            1/0.0018332648026315789 /1000, 1/0.0018505345394736843 /1000, 1/0.0009594983552631579 /1000,
-                            1/0.0009467516447368421/ 1000, 1/0.9906186266447369/1000]
+            weights_mask = [1/0.0013080357142857143 / 1000,1/0.0013584449404761905 / 1000, 1/0.0011456473214285713 /1000,
+                            1/0.0014114583333333334 /1000, 1/0.0017883184523809525 /1000, 1/0.0011772693452380952 /1000,
+                            1/0.0011646205357142858/ 1000, 1/0.9906462053571429/1000]
 
             mask_weights = torch.FloatTensor(weights_mask).cuda()
             self.ce2d_loss= nn.CrossEntropyLoss(weight=mask_weights)
@@ -265,14 +265,13 @@ class First_Third_Net(nn.Module):
 
                     self.losses['constrain_loss'] = constain_loss
 
-
-
             else:
                 final_loss = pose_loss + affordance_loss
 
             self.losses['pose_loss'] = pose_loss
             self.losses['affordance_loss'] = affordance_loss
             self.losses['mask_loss'] = mask_loss
+            self.losses['constrain_loss'] = constain_loss
 
             return final_loss
 
