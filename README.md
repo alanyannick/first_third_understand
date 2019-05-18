@@ -10,6 +10,11 @@ Python 3.7 or later with the following `pip3 install -U -r requirements.txt` pac
 - `torch >= 1.0.0`
 - `opencv-python`
 
+# Quick configuration:
+
+- pip install ninja yacs cython matplotlib tqdm opencv-python
+- conda install -c pytorch pytorch-nightly torchvision cudatoolkit=9.0
+
 # Description
 
 Now, I have done the overfit experiment for the single image and whole coco datasets, which the training runs about 1 hour per COCO epoch on a 1080 Ti.
