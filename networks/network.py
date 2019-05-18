@@ -75,7 +75,7 @@ class First_Third_Net(nn.Module):
         with_weight_balance = True
         if with_weight_balance:
         # Loss definition: Adds the pre-defined class weights
-            weights = [0.25, 0.5, 1.0]
+            weights = [1, 0.5, 0.25]
             class_weights = torch.FloatTensor(weights).cuda()
             self.ce_loss= nn.CrossEntropyLoss(weight=class_weights, size_average=True)
         else:
@@ -161,7 +161,7 @@ class First_Third_Net(nn.Module):
 
         # ====================== Third Branch: ego & exo affordance
         if self.third_branch_switch:
-            pick_mask = True
+            pick_mask = False
             if pick_mask:
                 # Create channel_weight_mask firstly
                 channel_pick_mask = torch.zeros(self.exo_rgb.shape[0], 13, 13, 7).cuda()
@@ -266,7 +266,8 @@ class First_Third_Net(nn.Module):
                     self.losses['constrain_loss'] = constain_loss
 
             else:
-                final_loss = pose_loss + affordance_loss
+                # constain_affordance_loss =  self.channel_constrain_loss(exo_affordance_out).cuda()
+                final_loss = pose_loss + affordance_loss # + constain_affordance_loss
 
             self.losses['pose_loss'] = pose_loss
             self.losses['affordance_loss'] = affordance_loss
