@@ -270,10 +270,11 @@ class load_images_and_labels():  # for training
 
             for index_value in range(0,-32,-1):
                 # (0, -31)
-                img_index_iter = str(img_index_value + index_value)
+                img_index_iter = f"{max(img_index_value + index_value, 1)}"
+
                 # src_name = '00000.jpg' | input_name = '000'
                 init_index = 5 - len(str(img_index_iter))
-                final_index_name = list(img_index)
+                final_index_name = list('00000')
                 start_index = 0
                 for index in range(init_index, 5):
                     final_index_name[index] = img_index_iter[start_index]
@@ -324,7 +325,7 @@ class load_images_and_labels():  # for training
                 img_index_iter = str(img_index_value + index_value)
                 # src_name = '00000.jpg' | input_name = '000'
                 init_index = 5 - len(str(img_index_iter))
-                final_index_name = list(img_index)
+                final_index_name = list('00000')
                 start_index = 0
                 for index in range(init_index, 5):
                     final_index_name[index] = img_index_iter[start_index]
