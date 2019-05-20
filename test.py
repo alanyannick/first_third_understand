@@ -60,7 +60,7 @@ def test(
         test_path = data_config['valid2']
         pickle_video_mask = data_config['pickle_video_mask_train']
         # pickle_ignore_mask = data_config['pickle_ignore_mask_train']
-        pickle_frame_mask = '/home/yangmingwen/first_third_person/merged_clusters/final_branch_gt_merged.pickle'
+        pickle_frame_mask = '/home/yangmingwen/first_third_person/nips_final_data/nips_data/final_nips_third_branch.pickle'
 
     # Initiate model
     if worker == 'detection':
@@ -121,9 +121,9 @@ def test(
                                                            #  permute(0, 2, 3, 1), dim=3).cpu().float().numpy()[0] + 24
                     # Masaic verison
                     sem_frame_affordance_mask = cv2.resize(
-                        torch.argmax(frame_affordance, dim=3).cpu().float().numpy()[0], (800, 800), interpolation=cv2.INTER_NEAREST) + 24
+                        torch.argmax(frame_affordance, dim=3).cpu().float().numpy()[0], (800, 800), interpolation=cv2.INTER_NEAREST) + 30
 
-                    gt_sem_frame_affordance_mask = cv2.resize(frame_mask[0][0], (800, 800), interpolation=cv2.INTER_NEAREST) + 24
+                    gt_sem_frame_affordance_mask = cv2.resize(frame_mask[0][0], (800, 800), interpolation=cv2.INTER_NEAREST) + 30
 
                     colors = loadmat('data/color150.mat')['colors']
                     # colors[7] = np.array([0, 0, 0])
@@ -311,15 +311,15 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weight_retina_05_18_Pose_Affordance_Third/latest.pt', help='path to weights file')
+    parser.add_argument('--weights', type=str, default='weight_retina_05_20_Pose_Affordance_Third_Final_Version_with5Cweight_lr_0.001/tmp_epo0_2500.pt', help='path to weights file')
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
-    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/weight_retina_05_18_Pose_Affordance_Third/', help='cfg file path')
+    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/weight_retina_05_20_Pose_Affordance_Third_Final_Version_with5Cweight_lr_0.001/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
     parser.add_argument('--testing_data_mode', type=bool, default=False, help='using testing or training data')
     parser.add_argument('--affordance_mode', type=bool, default=True, help='using testing or training data')
-    parser.add_argument('--center_crop', type=bool, default=False, help='using testing or training data')
+    parser.add_argument('--center_crop', type=bool, default=True, help='using testing or training data')
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='path to model config file')
     opt = parser.parse_args()
     print(opt, end='\n\n')

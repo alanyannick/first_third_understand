@@ -379,12 +379,21 @@ class load_images_and_labels():  # for training
             # Achieve center crop here
             # center_crop = False
             if self.center_crop:
+
                 x_crop1 = random.randint(0, 30)
                 y_crop1 = random.randint(0, 30)
                 x_crop2 = random.randint(0, 184)
                 y_crop2 = random.randint(0, 184)
                 x_crop3= round(float(x_crop2) * 16 / 985)
                 y_crop3 = round(float(y_crop2) * 16 / 985)
+
+                # x_crop1 = 16
+                # y_crop1 = 16
+                # x_crop2 = 16
+                # y_crop2 = 16
+                # x_crop3= round(float(x_crop2) * 16 / 985)
+                # y_crop3 = round(float(y_crop2) * 16 / 985)
+
 
                 # Random crop for img // Note here will be W, H, C, need to be changed dims for I3D input
                 for i in range(0, len(img)):

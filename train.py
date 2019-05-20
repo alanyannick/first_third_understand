@@ -77,7 +77,7 @@ def train(
                                         multi_scale=multi_scale, augment=False, center_crop=True,
                                         video_mask=pickle_video_mask)
 
-    lr0 = 0.01
+    lr0 = 0.001
     if resume:
         checkpoint = torch.load(latest_weights_file, map_location='cpu')
         model.load_state_dict(checkpoint['model'])
@@ -131,10 +131,10 @@ def train(
 
 
         # @TODO Important Switch Here (Default Loss)
-        current_mask_loss_switch = True
-        constain_switch = True
+        current_mask_loss_switch = False
+        constain_switch = False
 
-        if epoch > 1:
+        if epoch >= 1:
             lr = lr0 / 10
             mask_loss_switch = True
             current_mask_loss_switch = mask_loss_switch
@@ -173,9 +173,10 @@ def train(
                 continue
 
             # # Switch > 2400 warm up affordance
-            # if i > 2400:
-            #     constain_switch = False
-            #     current_mask_loss_switch = True
+            if i > 2400:
+                constain_switch = True
+                current_mask_loss_switch = True
+                lr = 0.001
 
             print('Current_lr:' + str(lr))
 

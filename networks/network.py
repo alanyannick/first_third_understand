@@ -228,11 +228,11 @@ class First_Third_Net(nn.Module):
         if not test_mode:
             # Pose loss
             # final loss should be divide by count number
-            pose_loss = self.ce_loss(ego_pose_out, torch.LongTensor(self.cls_targets).cuda()) / 3
+            pose_loss = self.ce_loss(ego_pose_out, torch.LongTensor(self.cls_targets).cuda())
 
             # Affordance loss
-            affordance_loss = (self.bce_loss(exo_affordance_out[gt_video_mask == 1], gt_video_mask[gt_video_mask == 1]) +
-            self.bce_loss(exo_affordance_out[gt_video_mask == 0], gt_video_mask[gt_video_mask == 0]) ) / 3
+            affordance_loss = self.bce_loss(exo_affordance_out[gt_video_mask == 1], gt_video_mask[gt_video_mask == 1]) + \
+                              self.bce_loss(exo_affordance_out[gt_video_mask == 0], gt_video_mask[gt_video_mask == 0])
 
             # Ignore mask loss
             # self.bce_loss(exo_affordance_out[(gt_ignore_mask - gt_video_mask) == 1], gt_video_mask[(gt_ignore_mask - gt_video_mask) == 1]).cuda()
@@ -242,12 +242,13 @@ class First_Third_Net(nn.Module):
             # final_out_feature_filter = torch.log(torch.clamp(final_out_feature_final, min=0.00001, max=0.99999))
 
             # Debuging
-            mask_loss = self.ce2d_loss(final_out_feature_final.permute(0, 3, 1, 2), frame_mask).cuda() / 3
+            mask_loss = self.ce2d_loss(final_out_feature_final.permute(0, 3, 1, 2), frame_mask).cuda()
 
             if mask_loss > 10:
                 print('debug')
                 torch.save(final_out_feature_final, '/home/yangmingwen/first_third_person/debug_feature.pth')
-
+                torch.save(frame_mask, '/home/yangmingwen/first_third_person/debug_frame_mask.pth')
+                assert "debug mask issue"
             constain_loss = 0
 
             # Final loss
@@ -255,7 +256,7 @@ class First_Third_Net(nn.Module):
                 if self.channel_contrain:
                     # final_loss = constain_loss_channel_mask + constain_loss
                     # final_loss = pose_loss + mask_loss + constain_loss_channel_mask + affordance_loss + constain_loss
-                    constain_loss_channel_mask = self.channel_constrain_loss(exo_affordance_out).cuda() / 3
+                    constain_loss_channel_mask = self.channel_constrain_loss(exo_affordance_out).cuda()
                     final_loss = pose_loss + affordance_loss + mask_loss + constain_loss + constain_loss_channel_mask
                     self.losses['constrain_loss'] = constain_loss_channel_mask
                 else:
@@ -264,7 +265,7 @@ class First_Third_Net(nn.Module):
                         constain_loss = self.constrain_loss(final_out_feature_final[:, :, :, :7]).cuda()
                         final_loss = pose_loss + mask_loss + affordance_loss + 3 * constain_loss
                     else:
-                        final_loss = pose_loss + mask_loss
+                        final_loss = pose_loss + mask_loss + affordance_loss
                     self.losses['constrain_loss'] = constain_loss
 
             else:
