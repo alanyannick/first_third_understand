@@ -77,7 +77,7 @@ def train(
                                         multi_scale=multi_scale, augment=False, center_crop=True,
                                         video_mask=pickle_video_mask)
 
-    lr0 = 0.001
+    lr0 = 0.01
     if resume:
         checkpoint = torch.load(latest_weights_file, map_location='cpu')
         model.load_state_dict(checkpoint['model'])
@@ -132,16 +132,19 @@ def train(
 
         # @TODO Important Switch Here (Default Loss)
         current_mask_loss_switch = True
-        constain_switch = False
+        constain_switch = True
 
         if epoch > 1:
             lr = lr0 / 10
             mask_loss_switch = True
             current_mask_loss_switch = mask_loss_switch
-        elif epoch > 5:
+            constain_switch = True
+
+        elif epoch > 10:
             lr = lr0 / 100
             mask_loss_switch = True
             current_mask_loss_switch = mask_loss_switch
+            constain_switch = True
         else:
             lr = lr0
 
@@ -169,9 +172,10 @@ def train(
             if sum([len(x) for x in targets]) < 1:  # if no targets continue
                 continue
 
-            # Switch > 2400 warm up affordance
-            if i > 2400:
-                constain_switch = False
+            # # Switch > 2400 warm up affordance
+            # if i > 2400:
+            #     constain_switch = False
+            #     current_mask_loss_switch = True
 
             print('Current_lr:' + str(lr))
 
@@ -223,26 +227,32 @@ def train(
             file.write(str(s))
             file.write('\n')
 
-            if (epoch > 0) & (epoch % 2 == 0):
+            if (epoch > 0) & (epoch % 200 == 0):
                 backup_file_name = 'backup{}.pt'.format(epoch)
                 backup_file_path = os.path.join(weights_path, backup_file_name)
                 os.system('cp {} {}'.format(
                     latest_weights_file,
                     backup_file_path,
                 ))
-                print('Save Model Backup')
 
-            if i % 500 == 0:
-                # Save latest checkpoint
-                checkpoint = {'epoch': i,
+                checkpoint = {'epoch': epoch,
                               'best_loss': best_loss,
                               'model': model.state_dict(),
                               'optimizer': optimizer.state_dict()}
-                print('Save Model_latest')
-                tmp_weights_file = os.path.join(weights_path, 'tmp'+str(i)+'.pt')
-                torch.save(checkpoint, latest_weights_file)
-
-            if i % 1000 == 0:
+                torch.save(checkpoint, backup_file_path)
+                print('Save Model Backup')
+            #
+            # if i % 500 == 0:
+            #     # Save latest checkpoint
+            #     checkpoint = {'epoch': i,
+            #                   'best_loss': best_loss,
+            #                   'model': model.state_dict(),
+            #                   'optimizer': optimizer.state_dict()}
+            #     print('Save Model_latest')
+            #     tmp_weights_file = os.path.join(weights_path, 'tmp'+str(i)+'.pt')
+            #     torch.save(checkpoint, latest_weights_file)
+            #
+            if (i > 0) & (i % 2500 == 0):
                 # Save tmp checkpoint
                 checkpoint = {'epoch': i,
                               'best_loss': best_loss,
@@ -253,12 +263,12 @@ def train(
                 torch.save(checkpoint, tmp_weights_file)
 
         # Save latest checkpoint
-        checkpoint = {'epoch': epoch,
-                      'best_loss': best_loss,
-                      'model': model.state_dict(),
-                      'optimizer': optimizer.state_dict()}
-        torch.save(checkpoint, best_weights_file)
-        print('Save Model Best')
+        # checkpoint = {'epoch': epoch,
+        #               'best_loss': best_loss,
+        #               'model': model.state_dict(),
+        #               'optimizer': optimizer.state_dict()}
+        # torch.save(checkpoint, best_weights_file)
+        # print('Save Model Best')
 
         # file.close()
 
