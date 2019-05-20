@@ -79,7 +79,7 @@ class First_Third_Net(nn.Module):
             class_weights = torch.FloatTensor(weights).cuda()
             self.ce_loss= nn.CrossEntropyLoss(weight=class_weights, size_average=True)
         else:
-            self.ce_loss = nn.CrossEntropyLoss()
+            self.ce_loss = nn.CrossEntropyLoss(size_average=True)
         self.bce_loss = nn.BCEWithLogitsLoss(size_average=True)
         self.soft_max = torch.nn.Softmax(dim=1)
         self.max_pooling = nn.MaxPool1d(7)
@@ -95,15 +95,15 @@ class First_Third_Net(nn.Module):
                             1/0.0011646205357142858/ 1000, 1/0.9906462053571429/1000]
 
             mask_weights = torch.FloatTensor(weights_mask).cuda()
-            self.ce2d_loss= nn.CrossEntropyLoss(weight=mask_weights)
-            self.nll_loss = nn.NLLLoss(weight=mask_weights)
+            self.ce2d_loss= nn.CrossEntropyLoss(weight=mask_weights, size_average=True)
+            self.nll_loss = nn.NLLLoss(weight=mask_weights, size_average=True)
 
         else:
             self.ce2d_loss = nn.CrossEntropyLoss(size_average=True)
 
         self.constrain_loss = ConstrainLoss()
         self.channel_contrain = False
-
+        self.channel_constrain_loss = ConstrainLoss()
         if self.channel_contrain:
             self.channel_constrain_loss = ConstrainLoss()
 
@@ -161,7 +161,7 @@ class First_Third_Net(nn.Module):
 
         # ====================== Third Branch: ego & exo affordance
         if self.third_branch_switch:
-            pick_mask = False
+            pick_mask = True
             if pick_mask:
                 # Create channel_weight_mask firstly
                 channel_pick_mask = torch.zeros(self.exo_rgb.shape[0], 13, 13, 7).cuda()
@@ -227,11 +227,12 @@ class First_Third_Net(nn.Module):
             
         if not test_mode:
             # Pose loss
-            pose_loss = self.ce_loss(ego_pose_out, torch.LongTensor(self.cls_targets).cuda())
+            # final loss should be divide by count number
+            pose_loss = self.ce_loss(ego_pose_out, torch.LongTensor(self.cls_targets).cuda()) / 3
 
             # Affordance loss
-            affordance_loss = self.bce_loss(exo_affordance_out[gt_video_mask == 1], gt_video_mask[gt_video_mask == 1]) + \
-            self.bce_loss(exo_affordance_out[gt_video_mask == 0], gt_video_mask[gt_video_mask == 0])
+            affordance_loss = (self.bce_loss(exo_affordance_out[gt_video_mask == 1], gt_video_mask[gt_video_mask == 1]) +
+            self.bce_loss(exo_affordance_out[gt_video_mask == 0], gt_video_mask[gt_video_mask == 0]) ) / 3
 
             # Ignore mask loss
             # self.bce_loss(exo_affordance_out[(gt_ignore_mask - gt_video_mask) == 1], gt_video_mask[(gt_ignore_mask - gt_video_mask) == 1]).cuda()
@@ -241,33 +242,34 @@ class First_Third_Net(nn.Module):
             # final_out_feature_filter = torch.log(torch.clamp(final_out_feature_final, min=0.00001, max=0.99999))
 
             # Debuging
-            mask_loss = self.ce2d_loss(final_out_feature_final.permute(0, 3, 1, 2), frame_mask).cuda()
-            # print('min: value')
-            # print(frame_mask.min())
-            # print('max: value')
-            # print(frame_mask.max())
-            if mask_loss > 5:
+            mask_loss = self.ce2d_loss(final_out_feature_final.permute(0, 3, 1, 2), frame_mask).cuda() / 3
+
+            if mask_loss > 10:
                 print('debug')
-            # Constrain loss without background
-            constain_loss = self.constrain_loss(final_out_feature_final[:,:,:,:7]).cuda()
+                torch.save(final_out_feature_final, '/home/yangmingwen/first_third_person/debug_feature.pth')
+
+            constain_loss = 0
 
             # Final loss
             if mask_loss_switch:
                 if self.channel_contrain:
-                    constain_loss_channel_mask = self.channel_constrain_loss(exo_affordance_out).cuda()
+                    # final_loss = constain_loss_channel_mask + constain_loss
+                    # final_loss = pose_loss + mask_loss + constain_loss_channel_mask + affordance_loss + constain_loss
+                    constain_loss_channel_mask = self.channel_constrain_loss(exo_affordance_out).cuda() / 3
                     final_loss = pose_loss + affordance_loss + mask_loss + constain_loss + constain_loss_channel_mask
-                    self.losses['constrain_loss'] = constain_loss + constain_loss_channel_mask
+                    self.losses['constrain_loss'] = constain_loss_channel_mask
                 else:
                     if self.constrain_switch:
-                        final_loss = pose_loss + affordance_loss + mask_loss + constain_loss
+                        # Constrain loss without background
+                        constain_loss = self.constrain_loss(final_out_feature_final[:, :, :, :7]).cuda()
+                        final_loss = pose_loss + mask_loss + affordance_loss + 3 * constain_loss
                     else:
-                        final_loss = pose_loss + affordance_loss + mask_loss
-
+                        final_loss = pose_loss + mask_loss
                     self.losses['constrain_loss'] = constain_loss
 
             else:
                 # constain_affordance_loss =  self.channel_constrain_loss(exo_affordance_out).cuda()
-                final_loss = pose_loss + affordance_loss # + constain_affordance_loss
+                final_loss = pose_loss + affordance_loss
 
             self.losses['pose_loss'] = pose_loss
             self.losses['affordance_loss'] = affordance_loss
