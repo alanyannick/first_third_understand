@@ -373,8 +373,8 @@ def test(
                         predict_bbox_img_with_label_aff = cv2.putText(predict_bbox_img_with_label_aff, text, (int(y_center_begin),int(x_center_begin)), cv2.FONT_HERSHEY_COMPLEX,
                                     1, (0, 255, 255), 1, cv2.LINE_AA)
 
-                        text = 'Cut Confidence < 0.4' + str(c)
-                        predict_bbox_img_with_label_aff = cv2.putText(predict_bbox_img_with_label_aff, text, (int(y_center_begin),int(x_center_begin)), cv2.FONT_HERSHEY_COMPLEX,
+                        text = 'Cut Confidence < 0.4'
+                        predict_bbox_img_with_label_aff = cv2.putText(predict_bbox_img_with_label_aff, text, (5,5), cv2.FONT_HERSHEY_COMPLEX,
                                     1, (0, 255, 255), 1, cv2.LINE_AA)
                         ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
                                                            name='predict_frame_mask_map_intensity.jpg',
