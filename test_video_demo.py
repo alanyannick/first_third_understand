@@ -58,21 +58,28 @@ with open(list_file) as f:
             datasets_list.append(dataset_name)
 print('datasets_list num:' + str(len(datasets_list)) + '\n' + str(datasets_list))
 
+# for i in datasets_list:
+#     save_folder = '/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/scenes_test/' + i + 'third-' + str('00001') + '.jpg'
+#     source_folder = '/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/scenes/'
+#     link = source_folder + i + 'third-' + str('00001') + '.jpg'
+#     save_image = cv2.imread(link)
+#     cv2.imwrite(save_folder, save_image)
+
 # =============================
 # Video setting
 out_file_link_balance = '/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/file_list_test_new_4_22_video_demo.txt'
-set_video = 14
+set_video = 25
 video_num = 1
-init_frame = 400
-number_frames = 1200
+init_frame = 300
+number_frames = 1000
 # Save Frame place
-pathIn = '/home/yangmingwen/first_third_person/demo_video26/'
+pathIn = '/home/yangmingwen/first_third_person/demo_video42/'
 # Save Video place
-pathOut = '/home/yangmingwen/first_third_person/demo/video_24.mp4'
+pathOut = '/home/yangmingwen/first_third_person/demo/video_42.mp4'
 # ==============================
 
 Choose_Video = True
-video_name = 'BD060003_'
+video_name = 'BD021001_'
 
 with open(out_file_link_balance, 'w') as gt_file:
     with open(list_file) as f:
@@ -233,7 +240,7 @@ def test(
 
                     colors = loadmat('data/color150.mat')['colors']
                     # colors[7] = np.array([0, 0, 0])
-                    mask_switch = False
+                    mask_switch = True
                     if mask_switch:
                         sem_frame_mask = colorEncode(sem_frame_affordance_mask, colors)
                         colors = loadmat('data/color150.mat')['colors']
@@ -249,10 +256,6 @@ def test(
                     pose_affordance = pose_affordance.squeeze(0)
                     labelmap_rgb = np.zeros((800, 800),
                                             dtype=np.float16)
-                    labelmap_rgb_gt = np.zeros((800, 800),
-                                               dtype=np.float16)
-
-                    each_map_threshold = 40
 
                     out_image_folder = os.path.join(out_folder, 'images/')
 
@@ -261,9 +264,9 @@ def test(
                     # cv2.imwrite('/home/yangmingwen/first_third_person/1.jpg',
                     #             ((imgs[0][:, 32, :, :] + 1) * 128).transpose(1, 2, 0))
 
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='input_image_ego.jpg',
-                                                       img=((imgs[0][:, 32, :, :] + 1) * 128).transpose(1, 2, 0))
+                    # ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                    #                                    name='input_image_ego.jpg',
+                    #                                    img=((imgs[0][:, 32, :, :] + 1) * 128).transpose(1, 2, 0))
 
                     ego_input = ((imgs[0][:, 32, :, :] + 1) * 128).transpose(1, 2, 0)
 
@@ -299,12 +302,12 @@ def test(
                     #                                    img=(gt_bbox_img_with_keypoint))
 
                     # Source image exo
-                    ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
-                                                       name='input_image'
-                                                            + '_gt_label' + str(gt_pose_label) + '_predict_label' + str(
-                                                           predict_pose_label) + '.jpg',
-                                                       img=np.transpose((scenes_gt[0] + 128).cpu().float().numpy(),
-                                                                        (1, 2, 0)))
+                    # ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                    #                                    name='input_image'
+                    #                                         + '_gt_label' + str(gt_pose_label) + '_predict_label' + str(
+                    #                                        predict_pose_label) + '.jpg',
+                    #                                    img=np.transpose((scenes_gt[0] + 128).cpu().float().numpy(),
+                    #                                                     (1, 2, 0)))
 
                     input_exo_gt = np.transpose((scenes_gt[0] + 128).cpu().float().numpy(),
                                                                         (1, 2, 0))
@@ -312,9 +315,72 @@ def test(
                     # ----- Affordance prediction -------
                     visualize_affordance = affordance_mode
                     if visualize_affordance:
-                        # heatmap prediction
-                        heatmap_all = cv2.applyColorMap(np.uint8(labelmap_rgb)
+
+                        pose_affordance = pose_affordance.squeeze(0)
+                        labelmap_rgb = np.zeros((800, 800),
+                                                dtype=np.float16)
+                        labelmap_rgb_gt = np.zeros((800, 800),
+                                                   dtype=np.float16)
+
+                        each_map_threshold = 0
+
+                        out_image_folder = os.path.join(out_folder, 'images/')
+
+                        pose_affordance_final = []
+                        # for i in range(0, pose_affordance.shape[2]):
+                        for i in range(0, 7):
+                            # predict for affordance
+                            affordance = cv2.resize((pose_affordance[:, :, i].cpu().float().numpy() * 255), (800, 800))
+                            # ground truth for affordance
+                            video_mask_gt = cv2.resize((video_mask[0][i, :, :] * 255.0), (800, 800),
+                                                       interpolation=cv2.INTER_NEAREST)
+
+                            # insert pose_prediction and gt to html
+                            # ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                            #                                    name='pose_predict'+str(i)+'.jpg',
+                            #                                    img=affordance)
+
+                            # ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                            #                                    name='pose_' + str(i) + '_gt.jpg',
+                            #                                    img=video_mask_gt)
+                            # insert the prediction_all
+                            heatmap = cv2.applyColorMap(np.uint8(affordance)
                                                         , cv2.COLORMAP_JET)
+
+                            final_out = np.uint8(
+                                heatmap * 0.4 + np.transpose((scenes[0] + 128).cpu().float().numpy(), (1, 2, 0)) * 0.6)
+                            # ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                            #                                    name='predict_pose_heat_map' + str(i) + '.jpg',
+                            #                                    img=final_out)
+
+                            pose_affordance_final.append(final_out)
+
+                            # insert pose prediction
+                            predict_bbox = [0, 0, 800, 800]
+                            if i == 4:
+                                pose_draw_label = 7
+                            elif i == 5:
+                                pose_draw_label = 12
+                            elif i == 6:
+                                pose_draw_label = 17
+                            else:
+                                pose_draw_label = i
+                            predict_pose_heat_map = drawing_bbox_keypoint_gt(input=scenes, bbox=predict_bbox,
+                                                                             label=pose_draw_label)
+                            ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                                                               name='pose_prediction_distribution' + str(i) + '.jpg',
+                                                               img=(predict_pose_heat_map))
+
+                        #     # generate final affordance mask
+                        #     labelmap_rgb[affordance >= each_map_threshold] = affordance[
+                        #         affordance >= each_map_threshold]
+                        #
+                        #     # generate gt mask
+                        #     labelmap_rgb_gt[video_mask_gt >= 40.0] = video_mask_gt[video_mask_gt >= 40.0]
+                        #
+                        # # heatmap prediction
+                        # heatmap_all = cv2.applyColorMap(np.uint8(labelmap_rgb)
+                        #                                 , cv2.COLORMAP_JET)
 
                         # Mask prediction
                         if mask_switch:
@@ -325,6 +391,21 @@ def test(
                         # frame_heat_affordance = frame_affordance.clone()
                         frame_affordance_video = mask_soft_max(frame_affordance)
                         frame_heat_affordance = frame_affordance_video[:, :, :, :7].clone()
+                        third_final_affordance = []
+                        # predict_affordance_map
+                        for i in range(0, 7):
+                            # predict for affordance
+                            third_affordance = cv2.resize((frame_heat_affordance[0][:, :, i].cpu().float().numpy() * 255), (800, 800))
+                            third_heatmap = cv2.applyColorMap(np.uint8(third_affordance)
+                                                        , cv2.COLORMAP_JET)
+
+                            third_final_out = np.uint8(
+                                third_heatmap * 0.4 + np.transpose((scenes[0] + 128).cpu().float().numpy(), (1, 2, 0)) * 0.6)
+                            # ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
+                            #                                    name='predict_pose_heat_map' + str(i) + '.jpg',
+                            #                                    img=final_out)
+
+                            third_final_affordance.append(third_final_out)
 
                         # Set threhold for visualization
                         # frame_heat_affordance[frame_heat_affordance < 0] = 0
@@ -374,7 +455,7 @@ def test(
                                     1, (0, 255, 255), 1, cv2.LINE_AA)
 
                         text = 'Cut Confidence < 0.4'
-                        predict_bbox_img_with_label_aff = cv2.putText(predict_bbox_img_with_label_aff, text, (5,5), cv2.FONT_HERSHEY_COMPLEX,
+                        predict_bbox_img_with_label_aff = cv2.putText(predict_bbox_img_with_label_aff, text, (30,30), cv2.FONT_HERSHEY_COMPLEX,
                                     1, (0, 255, 255), 1, cv2.LINE_AA)
                         ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
                                                            name='predict_frame_mask_map_intensity.jpg',
@@ -386,11 +467,23 @@ def test(
                                                                img=(gt_frame_mask))
 
                         ego_input = cv2.resize(ego_input, (800, 800))
-                        final_total = np.concatenate([ego_input, sem_heatmap_final, predict_bbox_img_with_label_aff], axis=1)
+                        final_total = np.concatenate([ego_input, sem_heatmap_final, predict_bbox_img_with_label_aff,
+                                                      pose_affordance_final[0], pose_affordance_final[1], pose_affordance_final[2],
+                                                      pose_affordance_final[3], pose_affordance_final[4], pose_affordance_final[5],
+                                                      pose_affordance_final[6]], axis=1)
+
+                        final_prediction = np.concatenate([ ego_input, sem_heatmap_final, predict_bbox_img_with_label_aff,
+                                                    third_final_affordance[0],
+                                                     third_final_affordance[1], third_final_affordance[2],
+                                                           third_final_affordance[3], third_final_affordance[4],
+                                                           third_final_affordance[5], third_final_affordance[6]], axis=1)
+
+                        final_show = np.concatenate([final_total, final_prediction], axis=0)
+
                         # input_exo_gt, gt_frame_mask, sem_frame_mask
 
                         final_path = pathIn + str(batch_i) + '.png'
-                        cv2.imwrite(final_path, final_total)
+                        cv2.imwrite(final_path, final_show)
 
                     # html.add_images(ims, txts, links)
                     # html.save()
@@ -408,9 +501,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
     parser.add_argument('--weights', type=str,
-                        default='weight_retina_05_21_Pose_Affordance_Third_Final_Version_Loss_Switch_warm_up_2400/tmp_epo3_2500.pt',
+                        default='weight_retina_05_21_Pose_Affordance_Third_Final_Version_Loss_Switch_warm_up_2400/tmp_epo2_2500.pt',
                         help='path to weights file')
     # weight_retina_05_21_Pose_Affordance_Third_Final_Version_Loss_Switch_warm_up_2400/tmp_epo2_5000.pt
+    # weight_retina_05_21_Pose_Affordance_Third_Final_Version_Loss_Switch_warm_up_2400/tmp_epo3_2500.pt
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
