@@ -112,7 +112,7 @@ def test(
     if scene_flag:
         for batch_i, (imgs, targets, scenes, scenes_gt, video_mask, frame_mask) in enumerate(dataloader):
             total_count += 1
-            if batch_i > 100:
+            if batch_i > 100000000:
                 break
             with torch.no_grad():
                 if worker == 'detection':
@@ -166,7 +166,7 @@ def test(
                     y_true = np.zeros((7,13,13), dtype=np.float16)
                     for i in range(0, 13):
                         for j in range(0, 13):
-                            if frame_heat_affordance[i][j] > 0 and x1 < j < x2 and y1 < i < y2:
+                            if frame_heat_affordance[i][j] > 0 and x1 < i < x2 and y1 < j < y2:
                                 print('Hit')
                                 # Set the region
                                 y_true[calculate_predict][int(y1):int(y2), int(x1):int(x2)] = 1
