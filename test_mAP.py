@@ -112,7 +112,7 @@ def test(
     if scene_flag:
         for batch_i, (imgs, targets, scenes, scenes_gt, video_mask, frame_mask) in enumerate(dataloader):
             total_count += 1
-            if batch_i > 10000000:
+            if batch_i > 300000000:
                 break
             with torch.no_grad():
                 if worker == 'detection':
