@@ -129,7 +129,7 @@ def test(
 
                     # Create the frame mask here
                     mask_different_class = []
-                    mask_for_map = torch.argmax(frame_affordance, dim=3).cpu().float().numpy()[0]
+                    mask_for_map = frame_mask[0][0]  # torch.argmax(frame_affordance, dim=3).cpu().float().numpy()[0]
 
                     # Assuming we only have one class & we want to get the final 1pose index of 0,1 mask ( out of 7 index mask)
                     for i in range(0, 7):
@@ -167,7 +167,7 @@ def test(
                     if x1 < x_center < x2 and y1 < y_center < y2:
                         print('Hit')
                         # Set the region
-                        y_true[calculate_predict][int(x1):int(x2), int(y1):int(y2)] = 1
+                        y_true[calculate_predict][int(y1):int(y2), int(x1):int(x2)] = 1
 
                     y_score = frame_affordance_video[:, :, :, :7].squeeze(
                             0).permute(2,0,1).cpu().float().numpy()
@@ -178,18 +178,19 @@ def test(
         total_y_true = np.array(total_y_true)
         total_y_score = np.array(total_y_score)
 
+        mAP = np.zeros((7), dtype=np.float16)
         for each_class in range(0, 7):
             per_y_score = total_y_score[:total_y_score.shape[0], each_class, :, :].reshape(total_y_score.shape[0] * 13 * 13)
             per_y_true = total_y_true[:total_y_true.shape[0], each_class, :, :].reshape(total_y_score.shape[0] * 13 * 13)
             # predict:
             print('Class' + str(each_class) + '_AP: ')
             # calculate MAP
-            print(average_precision_score(per_y_true, per_y_score))
+            mAP[each_class] = average_precision_score(per_y_true, per_y_score)
 
-
-        print('Final Pose accuracy:' + str(pose_correct_count / total_count))
-        class_balance_accuracy = np.array(corrct_class_balance) / np.array(total_classes)
-        print('Final Balance Class Pose accuracy:' + str(class_balance_accuracy.mean()))
+        print('AP:')
+        print(mAP)
+        print('\nmAP:')
+        print(mAP.mean())
 
 
 
