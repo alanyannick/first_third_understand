@@ -112,7 +112,7 @@ def test(
     if scene_flag:
         for batch_i, (imgs, targets, scenes, scenes_gt, video_mask, frame_mask) in enumerate(dataloader):
             total_count += 1
-            if batch_i > 300000000:
+            if batch_i > 100:
                 break
             with torch.no_grad():
                 if worker == 'detection':
@@ -164,14 +164,15 @@ def test(
 
                     # Create corresponding X - mAP Map, other region we will set to the 0 value.
                     y_true = np.zeros((7,13,13), dtype=np.float16)
-                    if x1 < x_center < x2 and y1 < y_center < y2:
-                        print('Hit')
-                        # Set the region
-                        y_true[calculate_predict][int(y1):int(y2), int(x1):int(x2)] = 1
+                    for i in range(0, 13):
+                        for j in range(0, 13):
+                            if frame_heat_affordance[i][j] > 0 and x1 < j < x2 and y1 < i < y2:
+                                print('Hit')
+                                # Set the region
+                                y_true[calculate_predict][int(y1):int(y2), int(x1):int(x2)] = 1
 
                     y_score = frame_affordance_video[:, :, :, :7].squeeze(
                             0).permute(2,0,1).cpu().float().numpy()
-
                     total_y_true.append(y_true)
                     total_y_score.append(y_score)
 
@@ -186,6 +187,8 @@ def test(
             print('Class' + str(each_class) + '_AP: ')
             # calculate MAP
             mAP[each_class] = average_precision_score(per_y_true, per_y_score)
+            np.save('/home/yangmingwen/per_y_true'+str(each_class), per_y_true)
+            np.save('/home/yangmingwen/per_y_true'+str(each_class), per_y_score)
 
         print('AP:')
         print(mAP)
