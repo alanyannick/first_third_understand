@@ -225,12 +225,16 @@ class load_images_and_labels():  # for training
             scene_flag = True
             if scene_flag:
                 scene_path = (img_path.split(img_path.split('-')[-1])[0] + '00001.jpg').replace('images', 'scenes').replace('first-', 'third-')
+                scene_path = scene_path.replace('BD020001_third-00001', 'MBYXAEGO_5_third-00001')
                 scene_gt_path = (img_path).replace('images', 'scenes_gt').replace('first-', 'third-')
                 scene_img = cv2.imread(scene_path)
                 scene_gt_img = cv2.imread(scene_gt_path)
                 if scene_img is None:
                     assert ("Cannot find the scene image in " + scene_path)
                     continue
+                if scene_gt_img is None:
+                    print('Cannot find the scene_gt images' + scene_gt_path)
+                    scene_gt_img = cv2.imread('/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/scenes_gt/KT020000_third-01000.jpg')
 
             frame_flag = True
             # Get the specific frame mask here
@@ -243,7 +247,8 @@ class load_images_and_labels():  # for training
                 except Exception as error:
                     print(error)
                     print('Dont care during training:' + frame_tag)
-                    frame_tag = 'bwd-ZGWMEEGO_1_first-00560'
+                    # frame_tag = 'bwd-ZGWMEEGO_1_first-00560'
+                    frame_tag = '0EU2AEGO_2_first-01303'
                     per_frame_mask = self.gt_per_frame_mask[frame_tag]
                     per_frame_mask[per_frame_mask == -1] = 7
 
@@ -257,7 +262,7 @@ class load_images_and_labels():  # for training
                     # self.per_video_ignore_mask = self.ignore_video_mask[video_tag]
                 except:
                     print('Test_Mode: Do not care about the gt_video_mask'+video_tag)
-                    video_tag = '0EU2AEGO_1_'
+                    video_tag = '0EU2AEGO_2_'
                     self.per_video_mask = self.gt_video_mask[video_tag]
                     # self.per_video_ignore_mask = self.ignore_video_mask[video_tag]
 
@@ -366,13 +371,15 @@ class load_images_and_labels():  # for training
             for i in range(0, len(img_plus)):
                 img.append(img_plus[i])
             # Normalize the ego as I3D input
-            if self.center_crop:
-                for i in range(0, len(img)):
-                    img[i] = cv2.resize(img[i], (256, 256)) / 128 - 1
-            else:
-                for i in range(0, len(img)):
-                    img[i] = cv2.resize(img[i], (224, 224)) / 128 - 1
-
+            try:
+                if self.center_crop:
+                    for i in range(0, len(img)):
+                        img[i] = cv2.resize(img[i], (256, 256)) / 128 - 1
+                else:
+                    for i in range(0, len(img)):
+                        img[i] = cv2.resize(img[i], (224, 224)) / 128 - 1
+            except:
+                continue
             scene_img = self.transforms(scene_img)
             scene_gt_img = self.transforms(scene_gt_img)
 
@@ -414,7 +421,8 @@ class load_images_and_labels():  # for training
             else:
                 if frame_flag:
                     # self.per_frame_mask = np.expand_dims(cv2.resize(per_frame_mask.transpose(1, 2, 0), (13, 13), interpolation=cv2.INTER_NEAREST), axis=0)
-                    self.per_frame_mask = per_frame_mask[:, 3:3 + 13, 3:3 + 13]
+                    # self.per_frame_mask = per_frame_mask[:, 1:1 + 13, 1:1 + 13]
+                    self.per_frame_mask = per_frame_mask[:, 0:0 + 13, 0:0 + 13]
                     # print("min:"+str(per_frame_mask.min()))
                     if per_frame_mask.min() == 7:
                         print(frame_tag)
