@@ -87,6 +87,7 @@ class First_Third_Net(nn.Module):
 
         # Important here with the 1x W x H x 8(3)
         self.mask_soft_max = torch.nn.LogSoftmax(dim=3)
+        self.mask_hard_soft_max = torch.nn.Softmax(dim=3)
 
         if with_weight_balance:
             # balance the weight from 0 - 1
@@ -280,7 +281,7 @@ class First_Third_Net(nn.Module):
             return final_loss
 
         else:
-            return torch.argmax(ego_pose_out, -1), self.sigmoid(exo_affordance_out), self.mask_soft_max(final_out_feature_final)
+            return torch.argmax(ego_pose_out, -1), self.sigmoid(exo_affordance_out), final_out_feature_final
 
 
 class egoFirstBranchModel(nn.Module):
