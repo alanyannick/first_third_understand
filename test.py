@@ -10,7 +10,7 @@ import visdom
 from scipy.io import loadmat
 from networks import *
 import networks
-
+from sklearn.metrics import average_precision_score
 def html_append_img(ims, txts, links, batch_i, i, out_img_folder, name='_exo.png', img=None):
     if img is not None:
         cv2.imwrite(os.path.join(out_img_folder, 'images_' + str(batch_i) + name), img)
@@ -37,6 +37,8 @@ def test(
 
 
 ):
+    # softMax function
+    mask_soft_max = torch.nn.Softmax(dim=3)
 
     # Visualize Way
     # python -m visdom.server -p 8399
@@ -112,6 +114,7 @@ def test(
                 if worker == 'detection':
                     output = model(imgs.cuda())
                 else:
+
                     pose_label, pose_affordance, frame_affordance= model(imgs, scenes, scenes_gt, targets, video_mask, frame_mask, test_mode=True)
                     predict_pose_label = pose_label.cpu().float().numpy()[0]
                     gt_pose_label = np.array(targets[0][0][0])
@@ -194,7 +197,7 @@ def test(
                         labelmap_rgb[affordance >= each_map_threshold] = affordance[affordance >= each_map_threshold]
 
                         # generate gt mask
-                        labelmap_rgb_gt[video_mask_gt >= 40.0] = video_mask_gt[video_mask_gt >= 40.0]
+                        labelmap_rgb_gt[video_mask_gt >= 0] = video_mask_gt[video_mask_gt >= 0]
 
 
 
@@ -277,8 +280,12 @@ def test(
                                                            name='predict_frame_mask_map.jpg',
                                                            img=(sem_frame_mask))
 
-                        frame_heat_affordance = frame_affordance.clone()
+                        # frame_heat_affordance = frame_affordance.clone()
+                        frame_affordance_video = mask_soft_max(frame_affordance)
+                        frame_heat_affordance = frame_affordance_video[:, :, :, :7].clone() # / frame_affordance_video[:, :, :, :7].max()
 
+                        # Set threhold for visualization
+                        # frame_heat_affordance[frame_heat_affordance < 0.6] = 0
 
                         sem_frame_affordance = cv2.resize(
                             torch.max(frame_heat_affordance, dim=3)[0].cpu().float().numpy()[0], (800, 800))
@@ -311,15 +318,15 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weight_retina_05_20_Pose_Affordance_Third_Final_Version_with5Cweight_lr_0.001/tmp_epo0_2500.pt', help='path to weights file')
+    parser.add_argument('--weights', type=str, default='weight_retina_05_21_Pose_Affordance_Third_Final_Version_Equal_Loss_Switch_warm_up_2400/tmp_epo3_2500.pt', help='path to weights file')
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
-    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/weight_retina_05_20_Pose_Affordance_Third_Final_Version_with5Cweight_lr_0.001/', help='cfg file path')
+    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/weight_retina_05_25_Pose_Affordance_Third_Final_Version_Equal_Loss_pretrain/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
-    parser.add_argument('--testing_data_mode', type=bool, default=False, help='using testing or training data')
+    parser.add_argument('--testing_data_mode', type=bool, default=True, help='using testing or training data')
     parser.add_argument('--affordance_mode', type=bool, default=True, help='using testing or training data')
-    parser.add_argument('--center_crop', type=bool, default=True, help='using testing or training data')
+    parser.add_argument('--center_crop', type=bool, default=False, help='using testing or training data')
     # parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='path to model config file')
     opt = parser.parse_args()
     print(opt, end='\n\n')
