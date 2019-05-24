@@ -576,7 +576,7 @@ def draw_keypoints(p_color, image, bbox, keypoints, thickness=2):
     return part_line
 
 
-def draw_limbs(image, part_line, l_pair, line_color, thickness=30):
+def draw_limbs(image, part_line, l_pair, line_color, thickness=10):
     '''using the keypoints info on top'''
     for i, (start_p, end_p) in enumerate(l_pair):
         if start_p in part_line and end_p in part_line:
