@@ -187,8 +187,8 @@ def test(
             print('Class' + str(each_class) + '_AP: ')
             # calculate MAP
             mAP[each_class] = average_precision_score(per_y_true, per_y_score)
-            np.save('/home/yangmingwen/per_y_true'+str(each_class), per_y_true)
-            np.save('/home/yangmingwen/per_y_true'+str(each_class), per_y_score)
+            # np.save('/home/yangmingwen/per_y_true'+str(each_class), per_y_true)
+            # np.save('/home/yangmingwen/per_y_true'+str(each_class), per_y_score)
 
         print('AP:')
         print(mAP)
