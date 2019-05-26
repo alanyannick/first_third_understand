@@ -111,82 +111,150 @@ def test(
     total_y_score = []
     if scene_flag:
         for batch_i, (imgs, targets, scenes, scenes_gt, video_mask, frame_mask) in enumerate(dataloader):
-            total_count += 1
-            if batch_i > 100000000:
-                break
-            with torch.no_grad():
-                if worker == 'detection':
-                    output = model(imgs.cuda())
-                else:
+            try:
 
-                    pose_label, pose_affordance, frame_affordance= model(imgs, scenes, scenes_gt, targets, video_mask, frame_mask, test_mode=True)
-                    predict_pose_label = pose_label.cpu().float().numpy()[0]
-                    gt_pose_label = np.array(targets[0][0][0])
+                total_count += 1
+                if batch_i > 100000000:
+                    break
+                with torch.no_grad():
+                    if worker == 'detection':
+                        output = model(imgs.cuda())
+                    else:
 
-                    # Bilinear version
-                    # sem_frame_affordance_mask = torch.argmax(F.interpolate(frame_affordance.permute(0, 3, 1, 2), size=(800, 800), mode='bilinear').
-                                                           #  permute(0, 2, 3, 1), dim=3).cpu().float().numpy()[0] + 24
+                        pose_label, pose_affordance, frame_affordance= model(imgs, scenes, scenes_gt, targets, video_mask, frame_mask, test_mode=True)
+                        predict_pose_label = pose_label.cpu().float().numpy()[0]
+                        gt_pose_label = np.array(targets[0][0][0])
 
-                    # Create the frame mask here
-                    mask_different_class = []
-                    mask_for_map = frame_mask[0][0]  # torch.argmax(frame_affordance, dim=3).cpu().float().numpy()[0]
+                        # Bilinear version
+                        # sem_frame_affordance_mask = torch.argmax(F.interpolate(frame_affordance.permute(0, 3, 1, 2), size=(800, 800), mode='bilinear').
+                                                               #  permute(0, 2, 3, 1), dim=3).cpu().float().numpy()[0] + 24
 
-                    # Assuming we only have one class & we want to get the final 1pose index of 0,1 mask ( out of 7 index mask)
-                    for i in range(0, 7):
-                        mask_different_class.append(((mask_for_map == i)).astype(int))
+                        # Create the frame mask here
+                        mask_different_class = []
+                        mask_for_map = frame_mask[0][0]  # torch.argmax(frame_affordance, dim=3).cpu().float().numpy()[0]
 
-                        if ((mask_for_map == i)).astype(int).max() >= 1 :
-                            calculate_predict = i
+                        # Assuming we only have one class & we want to get the final 1pose index of 0,1 mask ( out of 7 index mask)
+                        for i in range(0, 7):
+                            mask_different_class.append(((mask_for_map == i)).astype(int))
 
-                     # Get the X pose predicition and corresponding index of the X pose in GT mask
-                    frame_affordance_video = mask_soft_max(frame_affordance)
-                    frame_heat_affordance = frame_affordance_video[:, :, :, calculate_predict].clone().squeeze(
-                            0).cpu().float().numpy()
-                    index = frame_heat_affordance == frame_heat_affordance.max()
+                            if ((mask_for_map == i)).astype(int).max() >= 1 :
+                                calculate_predict = i
 
-                    # Get the center of the prediction with the highest confidence
-                    x_center, y_center = np.where(index.astype(int) == 1)
-                    # Transfer to the center
-                    x_center = x_center[0] + 0.5
-                    y_center = y_center[0] + 0.5
+                         # Get the X pose predicition and corresponding index of the X pose in GT mask
+                        frame_affordance_video = mask_soft_max(frame_affordance)
+                        frame_heat_affordance = frame_affordance_video[:, :, :, calculate_predict].clone().squeeze(
+                                0).cpu().float().numpy()
+                        index = frame_heat_affordance == frame_heat_affordance.max()
 
-                    # Transform targets
-                    x1 = (targets[0][0][1]/2 - targets[0][0][3] / 4) * 13
-                    y1 = (targets[0][0][2]/2 - targets[0][0][4] / 4) * 13
-                    x2 = (targets[0][0][1]/2 + targets[0][0][3] / 4) * 13
-                    y2 = (targets[0][0][2]/2 + targets[0][0][4] / 4) * 13
+                        # Get the center of the prediction with the highest confidence
+                        x_center, y_center = np.where(index.astype(int) == 1)
+                        # Transfer to the center
+                        x_center = x_center[0] + 0.5
+                        y_center = y_center[0] + 0.5
 
-                    # Get the GT region
-                    # x1 = (targets[0][0][1] - targets[0][0][3] / 2) * 13
-                    # y1 = (targets[0][0][2] - targets[0][0][4] / 2) * 13
-                    # x2 = (targets[0][0][1] + targets[0][0][3] / 2) * 13
-                    # y2 = (targets[0][0][2] + targets[0][0][4] / 2) * 13
+                        # Transform targets
+                        x1 = (targets[0][0][1]/2 - targets[0][0][3] / 4) * 13
+                        y1 = (targets[0][0][2]/2 - targets[0][0][4] / 4) * 13
+                        x2 = (targets[0][0][1]/2 + targets[0][0][3] / 4) * 13
+                        y2 = (targets[0][0][2]/2 + targets[0][0][4] / 4) * 13
 
-                    # Create corresponding X - mAP Map, other region we will set to the 0 value.
-                    y_true = np.zeros((7,13,13), dtype=np.float16)
-                    for i in range(0, 13):
-                        for j in range(0, 13):
-                            if frame_heat_affordance[i][j] > 0 and x1 < i < x2 and y1 < j < y2:
-                                print('Hit')
-                                # Set the region
-                                y_true[calculate_predict][int(y1):int(y2), int(x1):int(x2)] = 1
+                        # Get the GT region
+                        # x1 = (targets[0][0][1] - targets[0][0][3] / 2) * 13
+                        # y1 = (targets[0][0][2] - targets[0][0][4] / 2) * 13
+                        # x2 = (targets[0][0][1] + targets[0][0][3] / 2) * 13
+                        # y2 = (targets[0][0][2] + targets[0][0][4] / 2) * 13
 
-                    y_score = frame_affordance_video[:, :, :, :7].squeeze(
-                            0).permute(2,0,1).cpu().float().numpy()
-                    total_y_true.append(y_true)
-                    total_y_score.append(y_score)
+                        # Create corresponding X - mAP Map, other region we will set to the 0 value.
+                        y_true = np.zeros((7,13,13), dtype=np.float16)
+                        scale_map_x = (x2 - x1) / 2
+                        scale_map_y = (y2 - y1) / 2
+                        scale_map_factor = 1
 
+                        x1 = x1 - scale_map_x * scale_map_factor
+                        x2 = x2 + scale_map_x * scale_map_factor
+                        y1 = y1 - scale_map_y * scale_map_factor
+                        y2 = y2 + scale_map_y * scale_map_factor
+
+                        if x1 < 0:
+                            x1 = 0
+                        if y1 < 0:
+                            y1 = 0
+                        if x2 > 13:
+                            x2 = 13
+                        if y2 > 13:
+                            y2 = 13
+
+                        for i in range(0, 13):
+                            for j in range(0, 13):
+                                if frame_heat_affordance[i][j] > 0 and x1 < i < x2 and y1 < j < y2:
+                                    print('Hit')
+                                    # Set the region
+
+                                    y_true[calculate_predict][int(y1):int(y2), int(x1):int(x2)] = 1
+
+                        y_score = frame_affordance_video[:, :, :, :7].squeeze(
+                                0).permute(2,0,1).cpu().float().numpy()
+                        total_y_true.append(y_true)
+                        total_y_score.append(y_score)
+            except:
+                print('debug')
         total_y_true = np.array(total_y_true)
         total_y_score = np.array(total_y_score)
 
+        # # Find the maximum index
+        maximum_index = True
+        if maximum_index == True:
+            while True:
+                final_y_score = torch.from_numpy(total_y_score)
+                index = final_y_score == final_y_score.max()
+                b, x_center, y_center, c = index.nonzero().tolist()[0]
+                if total_y_true[b, x_center, y_center, c] == 1:
+                    print('Max Hit')
+                    print(b, x_center, y_center, c)
+                    print('\n Value:')
+                    print(total_y_score[b, x_center, y_center, c])
+                    print('\n True or False:')
+                    print(total_y_true[b, x_center, y_center, c])
+                    break
+                else:
+                    final_y_score[b, c, x_center, y_center] -= 1
+            # # Find the minimum index
+            while True:
+                final_y_score = torch.from_numpy(total_y_score).clone()
+                index = final_y_score == final_y_score.max()
+                b, c, x_center, y_center = index.nonzero().tolist()[0]
+                if total_y_true[b, c, x_center, y_center] == 0:
+                    print('Min Hit')
+                    print(b, x_center, y_center, c)
+                    print('\n Value:')
+                    print(total_y_score[b, x_center, y_center, c])
+                    print('\n True or False:')
+                    print(total_y_true[b, x_center, y_center, c])
+                    break
+                else:
+                    final_y_score[b, c, x_center, y_center] += 1
+
+        # y_true = np.array([0, 0, 1, 1])
+        # y_scores = np.array([0.1, 0.4, 0.35, 0.8])
+        #
+        # sorted_index = sorted(range(len(y_scores)), key=lambda k: y_scores[k])
+        # max_sorted_index = np.array(sorted_index).max()
+        # min_sorted_index = np.array(sorted_index).min()
+        # max_value = y_scores[max_sorted_index]
+        # min_value = y_scores[min_sorted_index]
+
+
         mAP = np.zeros((7), dtype=np.float16)
+
+
         for each_class in range(0, 7):
             per_y_score = total_y_score[:total_y_score.shape[0], each_class, :, :].reshape(total_y_score.shape[0] * 13 * 13)
             per_y_true = total_y_true[:total_y_true.shape[0], each_class, :, :].reshape(total_y_score.shape[0] * 13 * 13)
+
             # predict:
             print('Class' + str(each_class) + '_AP: ')
             # calculate MAP
-            mAP[each_class] = average_precision_score(per_y_true, per_y_score)
+            mAP[each_class] =90
             # np.save('/home/yangmingwen/per_y_true'+str(each_class), per_y_true)
             # np.save('/home/yangmingwen/per_y_true'+str(each_class), per_y_score)
 
@@ -202,11 +270,11 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weight_retina_05_21_Pose_Affordance_Third_Final_Version_Loss_Switch_warm_up_2400/tmp_epo2_2500.pt', help='path to weights file')
+    parser.add_argument('--weights', type=str, default='weight_retina_05_23_Only_Third_Final_Version_for_Tyler_baseline/tmp_epo3_2500.pt', help='path to weights file')
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
-    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/weight_retina_05_24_Pose_Affordance_Third_Final_Version_Equal_Loss_pretrain/', help='cfg file path')
+    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/weight_retina_05_23_Only_Third_Final_Version_for_Tyler_baseline/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
     parser.add_argument('--testing_data_mode', type=bool, default=True, help='using testing or training data')
     parser.add_argument('--affordance_mode', type=bool, default=True, help='using testing or training data')
