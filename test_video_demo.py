@@ -68,18 +68,18 @@ print('datasets_list num:' + str(len(datasets_list)) + '\n' + str(datasets_list)
 # =============================
 # Video setting
 out_file_link_balance = '/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/file_list_test_new_4_22_video_demo.txt'
-set_video = 25
+set_video = 1
 video_num = 1
-init_frame = 300
+init_frame = 500
 number_frames = 1000
 # Save Frame place
-pathIn = '/home/yangmingwen/first_third_person/demo_video42/'
+pathIn = '/home/yangmingwen/first_third_person/demo_video54/'
 # Save Video place
-pathOut = '/home/yangmingwen/first_third_person/demo/video_42.mp4'
+pathOut = '/home/yangmingwen/first_third_person/demo/video_54.mp4'
 # ==============================
 
 Choose_Video = True
-video_name = 'BD021001_'
+video_name = 'LV000000_'
 
 with open(out_file_link_balance, 'w') as gt_file:
     with open(list_file) as f:
@@ -353,9 +353,7 @@ def test(
                             #                                    name='predict_pose_heat_map' + str(i) + '.jpg',
                             #                                    img=final_out)
 
-                            pose_affordance_final.append(final_out)
-
-                            # insert pose prediction
+                            # transform pose
                             predict_bbox = [0, 0, 800, 800]
                             if i == 4:
                                 pose_draw_label = 7
@@ -365,6 +363,30 @@ def test(
                                 pose_draw_label = 17
                             else:
                                 pose_draw_label = i
+
+                            # visulize
+                            visulize_pose =True
+                            if visulize_pose:
+                                # Find the maximum index
+                                index = pose_affordance[:, :, i] == pose_affordance[:, :, i].max()
+                                x_center, y_center = index.nonzero().tolist()[0]
+
+                                # Calculate the coordinate [Left_Top X, Left_Top_y, w, h]
+                                x_center_begin = (x_center - 1) / 13 * 800
+                                y_center_begin = (y_center - 1) / 13 * 800
+                                x_center_end = 3 / 13 * 800
+                                y_center_end = 2 / 13 * 800
+                                aff_gt_bbox = [int(y_center_begin), int(x_center_begin), int(y_center_end),
+                                            int(x_center_end)]
+
+
+                                aff_final_out = drawing_bbox_keypoint_gt(input=list(
+                                    torch.from_numpy(final_out - 128).permute(2, 0, 1).unsqueeze(0)),
+                                                                                           bbox=aff_gt_bbox,
+                                                                                           label=pose_draw_label)
+
+                            pose_affordance_final.append(aff_final_out)
+
                             predict_pose_heat_map = drawing_bbox_keypoint_gt(input=scenes, bbox=predict_bbox,
                                                                              label=pose_draw_label)
                             ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
@@ -395,6 +417,29 @@ def test(
                         # predict_affordance_map
                         for i in range(0, 7):
                             # predict for affordance
+                            aff_vis_switch = True
+                            # Find the maximum index
+                            if aff_vis_switch:
+                                index = frame_heat_affordance == frame_heat_affordance[0][:, :, i].max()
+                                b, x_center, y_center, c = index.nonzero().tolist()[0]
+
+                                # Calculate the coordinate [Left_Top X, Left_Top_y, w, h]
+                                x_center_begin = (x_center - 1) / 13 * 800
+                                y_center_begin = (y_center - 1) / 13 * 800
+                                x_center_end = 3 / 13 * 800
+                                y_center_end = 2 / 13 * 800
+                                aff_bbox = [int(y_center_begin), int(x_center_begin), int(y_center_end),
+                                                int(x_center_end)]
+
+                                if c == 4:
+                                    pose_draw_label = 7
+                                elif c == 5:
+                                    pose_draw_label = 12
+                                elif c == 6:
+                                    pose_draw_label = 17
+                                else:
+                                    pose_draw_label = c
+
                             third_affordance = cv2.resize((frame_heat_affordance[0][:, :, i].cpu().float().numpy() * 255), (800, 800))
                             third_heatmap = cv2.applyColorMap(np.uint8(third_affordance)
                                                         , cv2.COLORMAP_JET)
@@ -405,6 +450,12 @@ def test(
                             #                                    name='predict_pose_heat_map' + str(i) + '.jpg',
                             #                                    img=final_out)
 
+
+                            if aff_vis_switch:
+                                third_final_out = drawing_bbox_keypoint_gt(input=list(
+                                    torch.from_numpy(third_final_out - 128).permute(2, 0, 1).unsqueeze(0)),
+                                                                                           bbox=aff_bbox,
+                                                                                           label=pose_draw_label)
                             third_final_affordance.append(third_final_out)
 
                         # Set threhold for visualization
@@ -467,12 +518,12 @@ def test(
                                                                img=(gt_frame_mask))
 
                         ego_input = cv2.resize(ego_input, (800, 800))
-                        final_total = np.concatenate([ego_input, sem_heatmap_final, predict_bbox_img_with_label_aff,
+                        final_total = np.concatenate([ego_input, predict_bbox_img_with_label_aff, sem_heatmap_final,
                                                       pose_affordance_final[0], pose_affordance_final[1], pose_affordance_final[2],
                                                       pose_affordance_final[3], pose_affordance_final[4], pose_affordance_final[5],
                                                       pose_affordance_final[6]], axis=1)
 
-                        final_prediction = np.concatenate([ ego_input, sem_heatmap_final, predict_bbox_img_with_label_aff,
+                        final_prediction = np.concatenate([ ego_input, predict_bbox_img_with_label_aff, sem_heatmap_final,
                                                     third_final_affordance[0],
                                                      third_final_affordance[1], third_final_affordance[2],
                                                            third_final_affordance[3], third_final_affordance[4],
@@ -501,7 +552,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
     parser.add_argument('--weights', type=str,
-                        default='weight_retina_05_21_Pose_Affordance_Third_Final_Version_Loss_Switch_warm_up_2400/tmp_epo2_2500.pt',
+                        default='weight_retina_05_23_Only_Third_Final_Version_for_Tyler_baseline/tmp_epo3_2500.pt',
                         help='path to weights file')
     # weight_retina_05_21_Pose_Affordance_Third_Final_Version_Loss_Switch_warm_up_2400/tmp_epo2_5000.pt
     # weight_retina_05_21_Pose_Affordance_Third_Final_Version_Loss_Switch_warm_up_2400/tmp_epo3_2500.pt
