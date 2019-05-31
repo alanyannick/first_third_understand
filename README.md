@@ -12,7 +12,7 @@ Python 3.7 or later with the following `pip3 install -U -r requirements.txt` pac
 
 # Quick configuration:
 
-- pip install ninja yacs cython matplotlib tqdm opencv-python
+- pip install joblib ninja yacs cython matplotlib tqdm opencv-python 
 - conda install -c pytorch pytorch-nightly torchvision cudatoolkit=9.0
 
 # Description
