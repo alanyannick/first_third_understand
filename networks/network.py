@@ -173,9 +173,16 @@ class First_Third_Net(nn.Module):
 
                 # Ego_pose0_weight with 0, 1, 2
                 for batch_index in range(0, self.exo_rgb.shape[0]):
-                    ego_pick_mask[batch_index, :, :, 0] = ego_pose_out_softmax[batch_index, 0].repeat(13, 13).cuda()
-                    ego_pick_mask[batch_index, :, :, 1] = ego_pose_out_softmax[batch_index, 1].repeat(13, 13).cuda()
-                    ego_pick_mask[batch_index, :, :, 2] = ego_pose_out_softmax[batch_index, 2].repeat(13, 13).cuda()
+                    # dream situation：
+                    dream_mask = False
+                    if dream_mask:
+                        ego_pick_mask[batch_index, :, :, int(self.cls_targets[batch_index])] = torch.from_numpy(np.array(self.cls_targets[batch_index])).repeat(13, 13).cuda()
+                        if  np.array(self.cls_targets[batch_index]).max()  >2:
+                            print('error')
+                    else:
+                        ego_pick_mask[batch_index, :, :, 0] = ego_pose_out_softmax[batch_index, 0].repeat(13, 13).cuda()
+                        ego_pick_mask[batch_index, :, :, 1] = ego_pose_out_softmax[batch_index, 1].repeat(13, 13).cuda()
+                        ego_pick_mask[batch_index, :, :, 2] = ego_pose_out_softmax[batch_index, 2].repeat(13, 13).cuda()
 
                     # copy the group weight from 0 1 2 to 0~7 dims
                     group_map = [0, 2, 5, 6]
@@ -264,7 +271,7 @@ class First_Third_Net(nn.Module):
                     if self.constrain_switch:
                         # Constrain loss without background
                         constain_loss = self.constrain_loss(final_out_feature_final[:, :, :, :7]).cuda()
-                        final_loss = pose_loss + mask_loss + affordance_loss + 3 * constain_loss
+                        final_loss = pose_loss + mask_loss + affordance_loss + constain_loss
                     else:
                         final_loss = pose_loss + mask_loss + affordance_loss
                     self.losses['constrain_loss'] = constain_loss
