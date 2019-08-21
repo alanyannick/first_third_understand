@@ -111,9 +111,9 @@ def test(
     if scene_flag:
         calculate_map = True
         for batch_i, (imgs, targets, scenes, scenes_gt, video_mask, frame_mask) in enumerate(dataloader):
-            if batch_i > 50:
-                break
-            else:
+            # if batch_i > 50:
+            #     break
+            # else:
                 try:
                     total_y_true = []
                     total_y_score = []
@@ -206,13 +206,17 @@ def test(
                                 # hit or not
                                 distance = np.square(x_center_gt - x_center) + np.square(y_center_gt-y_center)
                                 if distance <= ((3*3+5*5)/2) :
-                                    print('Hit Bounding Box')
+
                                     if c_gt == c_predict:
+                                        print('Hit Bounding Box')
+                                        hit_label = True
                                         predict_color = (0, 255, 0)
                                     else:
                                         predict_color = (255, 255, 0)
+                                        hit_label = 'middle'
                                 else:
                                     print('Not hit')
+                                    hit_label=False
                                     predict_color = (0,0,255)
 
                                 if calculate_map:
@@ -312,10 +316,21 @@ def test(
                                 final_image =  np.concatenate((final_image, gt_bbox_img_with_label_aff),
                                                axis=1)
                                 # +'pose_'+str(c_predict)
-                                cv2.imwrite(
-                                    '/home/yangmingwen/first_third_person/first_third_understanding/visual_map_distance/'+'distance_reciprocal_'+str(1/distance)+'confidence_'
-                                    +str(confidence.cpu().numpy())+'_'+str(batch_i)+
-                                '.jpg', final_image)
+                                if hit_label:
+                                    # cv2.imwrite(
+                                    #     '/home/yangmingwen/first_third_person/first_third_understanding/visual_map_distance_hit/'+'confidence_'
+                                    #     +str(confidence.cpu().numpy())+'_'+str(batch_i)+
+                                    # 'Hit_'+'.jpg', final_image)
+                                    hit_label='middle'
+                                elif hit_label=='middle':
+                                     continue
+                                     hit_label = 'middle'
+                                else:
+                                    cv2.imwrite(
+                                        '/home/yangmingwen/first_third_person/first_third_understanding/visual_map_distance_no_hit/'+'confidence_'
+                                        +str(confidence.cpu().numpy())+'_'+str(batch_i)+
+                                    'No_Hit_'+'.jpg', final_image)
+                                    hit_label='middle'
 
                                 out_image_folder = os.path.join(out_folder, 'images/')
                                 ims, txts, links = html_append_img(ims, txts, links, batch_i, i, out_image_folder,
@@ -359,13 +374,13 @@ if __name__ == '__main__':
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
     parser.add_argument('--weights', type=str,
-                        default='weight_retina_05_21_Pose_Affordance_Third_Final_Version_Loss_Switch_warm_up_2400/tmp_epo2_2500.pt',
+                        default='weight_retina_08_16_Pose_Affordance_Third_Final_Version_Equal_Loss_WithGTfirst_batchsize_4/tmp_epo6_2500.pt',
                         help='path to weights file')
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
     parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/'
-                                                   'weight_retina_08_06_Third_Final_Version_Loss_Switch_warm_up_2400/', help='cfg file path')
+                                                   'weight_retina_08_20_Third_Final_Version_Loss_Switch_warm_up_2400/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
     parser.add_argument('--testing_data_mode', type=bool, default=True, help='using testing or training data')
     parser.add_argument('--affordance_mode', type=bool, default=True, help='using testing or training data')
