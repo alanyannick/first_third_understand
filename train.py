@@ -39,7 +39,7 @@ def train(
         multi_scale=False,
         freeze_backbone=False,
         var=0,
-        gpu_id='0'
+        gpu_id='2'
 ):
     # device = torch_utils.select_device(gpu_choice=gpu_id)
     # print("Using device: \"{}\"".format(device))
@@ -145,6 +145,7 @@ def train(
             mask_loss_switch = True
             current_mask_loss_switch = mask_loss_switch
             constain_switch = True
+
         else:
             lr = lr0
 
@@ -179,6 +180,10 @@ def train(
                 lr = 0.001
 
             print('Current_lr:' + str(lr))
+
+            # Train Pose Branch
+            constain_switch = False
+            current_mask_loss_switch = False
 
             # Compute loss, compute gradient, update parameters
             loss = model(imgs, scenes, scenes_gt, targets, video_mask, frame_mask, mask_loss_switch=current_mask_loss_switch, constain_switch=constain_switch)

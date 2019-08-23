@@ -278,7 +278,11 @@ class First_Third_Net(nn.Module):
 
             else:
                 # constain_affordance_loss =  self.channel_constrain_loss(exo_affordance_out).cuda()
-                final_loss = pose_loss + affordance_loss
+                #  final_loss = pose_loss + affordance_loss
+                affordance_loss = 0
+                mask_loss = 0
+                constain_loss = 0
+                final_loss = pose_loss
 
             self.losses['pose_loss'] = pose_loss
             self.losses['affordance_loss'] = affordance_loss
