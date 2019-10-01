@@ -44,7 +44,10 @@ class First_Third_Net(nn.Module):
         # self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=3).cuda()
 
         # Build ego I3D module
-        self.first_ego_pose_branch = egoFirstBranchModelI3D(num_classes=3).cuda()
+        # self.first_ego_pose_branch = egoFirstBranchModelI3D(num_classes=3).cuda()
+
+        # Build ego TSM module
+        self.first_ego_pose_branch = egoFirstBranchModelTSM(num_classes=3).cuda()
 
         # Second Branch
         self.second_exo_affordance_branch = exoSecondBranchModel(256, num_classes=7).cuda()
@@ -56,6 +59,7 @@ class First_Third_Net(nn.Module):
         # Merge Branch
         self.merge_feature = MergeFeatureModule(256).cuda()
         self.merge_feature_i3d = MergeFeatureI3d(256).cuda()
+        self.merge_feature_TSM = MergeFeatureTSM(256).cuda()
         # class branch
         # self.classifier = ClassificationModel(256, num_classes=19)
 
@@ -132,8 +136,11 @@ class First_Third_Net(nn.Module):
 
         # ====================== First Branch: ego pose
         # for cross_entropy / with out B X 1 X Class
-        i3d_backbone_feature, ego_pose_out = self.first_ego_pose_branch(Variable(self.ego_rgb).cuda().float())
-        retina_ego_features = self.merge_feature_i3d(i3d_backbone_feature).cuda()
+        # i3d_backbone_feature, ego_pose_out = self.first_ego_pose_branch(Variable(self.ego_rgb).cuda().float())
+        # retina_ego_features = self.merge_feature_i3d(i3d_backbone_feature).cuda()
+        TSM_backbone_feature, ego_pose_out = self.first_ego_pose_branch(Variable(self.ego_rgb).cuda().float())
+        retina_ego_features = self.merge_feature_TSM(TSM_backbone_feature).cuda()
+
         # Detach pose branch for avoiding influence
         detach_ego = False
         if detach_ego:
@@ -169,8 +176,10 @@ class First_Third_Net(nn.Module):
                 ego_pick_mask = torch.zeros(self.exo_rgb.shape[0], 13, 13, 3).cuda()
 
                 # Softmax to get the channel-wise wright
-                ego_pose_out_softmax = self.soft_max(ego_pose_out).cuda()
-
+                # For TSM
+                ego_pose_out_softmax = self.soft_max(ego_pose_out.squeeze(1)).cuda()
+                # else:
+                # ego_pose_out_softmax = self.soft_max(ego_pose_out).cuda()
                 # Ego_pose0_weight with 0, 1, 2
                 for batch_index in range(0, self.exo_rgb.shape[0]):
                     # dream situation：
@@ -232,11 +241,11 @@ class First_Third_Net(nn.Module):
             #clamp
             # final_out_feature_final = torch.clamp(final_out_feature_final, 0, 1)
 
-            
+
         if not test_mode:
             # Pose loss
             # final loss should be divide by count number
-            pose_loss = self.ce_loss(ego_pose_out, torch.LongTensor(self.cls_targets).cuda())
+            pose_loss = self.ce_loss(ego_pose_out.squeeze(1), torch.LongTensor(self.cls_targets).cuda())
 
             # Affordance loss
             affordance_loss = self.bce_loss(exo_affordance_out[gt_video_mask == 1], gt_video_mask[gt_video_mask == 1]) + \
@@ -382,6 +391,88 @@ class egoFirstBranchModelI3D(nn.Module):
         return out_backbone, out_logits
 
 
+class egoFirstBranchModelTSM(nn.Module):
+
+    def __init__(self, num_classes=3):
+        # TSM model for ego branch
+        super(egoFirstBranchModelTSM, self).__init__()
+        import torch.hub
+        repo = 'epic-kitchens/action-models'
+        class_counts = (125, 352)
+        segment_count = 8
+        base_model = 'resnet50'
+        # tsn = torch.hub.load(repo, 'TSN', class_counts, segment_count, 'RGB',
+        #                      base_model=base_model,
+        #                      pretrained='epic-kitchens', force_reload=True)
+        # trn = torch.hub.load(repo, 'TRN', class_counts, segment_count, 'RGB',
+        #                      base_model=base_model,
+        #                      pretrained='epic-kitchens')
+        # mtrn = torch.hub.load(repo, 'MTRN', class_counts, segment_count, 'RGB',
+        #                       base_model=base_model,
+        #                       pretrained='epic-kitchens')
+
+        self.tsm_model = torch.hub.load(repo, 'TSM', class_counts, segment_count, 'RGB',
+                             base_model=base_model,
+                             pretrained='epic-kitchens')
+        self.tsm = torch.nn.Sequential(*list(torch.nn.DataParallel(self.tsm_model).module.children())[:-3])
+
+        self.avg_pool = torch.nn.AdaptiveAvgPool2d(output_size=(1,256))
+        self.linear = nn.Linear(256, 3)
+        # self.avg_pool = torch.nn.AvgPool2d(8)
+
+        # Show all entrypoints and their help strings
+        # for entrypoint in torch.hub.list(repo):
+        #     print(entrypoint)
+        #     print(torch.hub.help(repo, entrypoint))
+
+    def forward(self, x):
+        # out_backbone = self.tsm(x)
+
+        # batch_size = 1
+        # segment_count = 8
+        # snippet_length = 1  # Number of frames composing the snippet, 1 for RGB, 5 for optical flow
+        # snippet_channels = 3  # Number of channels in a frame, 3 for RGB, 2 for optical flow
+        # height, width = 224, 224
+
+        # inputs = torch.randn(
+        #     [batch_size, segment_count, snippet_length, snippet_channels, height, width]
+        # )
+        # The segment and snippet length and channel dimensions are collapsed into the channel
+        # dimension
+        # Input shape: N x TC x H x W
+
+        N, T, C, H, W = x.shape
+        new_x = torch.rand(N, T, int(C/8), H, W)
+        j = 0
+        for i in range(0, 64, 8):
+            new_x[:,:,j,:,:] = x[:,:,i,:,:]
+            j = j + 1
+
+        # out_backbone = new_x.reshape((N, 64, 1, 3, H, W))
+        # You can get features out of the models
+        out_backbone = self.tsm_model.features(new_x.cuda().reshape((N, -1, H, W)))
+        out_backbone = out_backbone.reshape(N, 8, 2048)
+
+        out = self.avg_pool(out_backbone)
+        # features = self.tsm(out_backbone)
+        # and then classify those features
+        # verb_logits, noun_logits = model.logits(features)
+        # # or just call the object to classify inputs in a single forward pass
+        # verb_logits, noun_logits = model(inputs)
+        # print(verb_logits.shape, noun_logits.shape)
+
+
+        # out = self.avg_pool(features)
+        # out = self.dropout(out)
+        # out = self.conv3d_0c_1x1(out)
+        # out = out.squeeze(3)
+        # out = out.squeeze(3)
+        # out = out.mean(2)
+        out_logits = self.linear(out)
+        # out = self.softmax(out_logits)
+        return out_backbone, out_logits
+
+
 class exoSecondBranchModel(nn.Module):
     def __init__(self, num_features_in, num_classes=15, prior=0.01, feature_size=256):
         super(exoSecondBranchModel, self).__init__()
@@ -515,6 +606,23 @@ class MergeFeatureI3d(nn.Module):
     def forward(self, x):
         out = x.permute(0, 1, 3, 4, 2).contiguous().view(x.shape[0], 49 * 1024, 8)
         out = self.max_pooling(out).view(x.shape[0], 7, 7, 1024)
+        # compress input should be B * C * H * W
+        out = self.conv_compress(out.permute(0,3,1,2))
+        # upscale 7x7 to 13x13
+        out = self.upsampled(out)
+        return out
+
+
+class MergeFeatureTSM(nn.Module):
+    def __init__(self, feature_size=256):
+        super(MergeFeatureTSM, self).__init__()
+        # Compress channel
+        self.conv_compress = nn.Conv2d(128, feature_size, kernel_size=1)
+        self.max_pooling = nn.MaxPool1d(8)
+        self.upsampled = nn.Upsample(size=13, mode='bilinear')
+    def forward(self, x):
+        out = x.permute(0,2,1)
+        out = self.max_pooling(out).view(x.shape[0], 4, 4, 128)
         # compress input should be B * C * H * W
         out = self.conv_compress(out.permute(0,3,1,2))
         # upscale 7x7 to 13x13
@@ -660,6 +768,7 @@ class ConstrainLoss(nn.Module):
                 loss += det_xy
         self.loss = loss / batch_size / channel_size
         return self.loss
+
 
 
 if __name__ == '__main__':
