@@ -138,7 +138,7 @@ class First_Third_Net(nn.Module):
         # for cross_entropy / with out B X 1 X Class
         # i3d_backbone_feature, ego_pose_out = self.first_ego_pose_branch(Variable(self.ego_rgb).cuda().float())
         # retina_ego_features = self.merge_feature_i3d(i3d_backbone_feature).cuda()
-        TSM_backbone_feature, ego_pose_out = self.first_ego_pose_branch(Variable(self.ego_rgb).cuda().float())
+        TSM_backbone_feature, ego_pose_out = self.first_ego_pose_branch((self.ego_rgb).cuda().float())
         retina_ego_features = self.merge_feature_TSM(TSM_backbone_feature).cuda()
 
         # Detach pose branch for avoiding influence
@@ -416,9 +416,9 @@ class egoFirstBranchModelTSM(nn.Module):
                              pretrained='epic-kitchens')
         self.tsm = torch.nn.Sequential(*list(torch.nn.DataParallel(self.tsm_model).module.children())[:-3])
 
-        self.avg_pool = torch.nn.AdaptiveAvgPool2d(output_size=(1,256))
-        self.linear = nn.Linear(256, 3)
-        # self.avg_pool = torch.nn.AvgPool2d(8)
+        # self.avg_pool = torch.nn.AdaptiveAvgPool2d(output_size=(1,256))
+        self.linear = nn.Linear(2048, 3)
+        self.avg_pool = nn.AvgPool1d(8)
 
         # Show all entrypoints and their help strings
         # for entrypoint in torch.hub.list(repo):
@@ -444,7 +444,11 @@ class egoFirstBranchModelTSM(nn.Module):
         N, T, C, H, W = x.shape
         new_x = torch.rand(N, T, int(C/8), H, W)
         j = 0
-        for i in range(0, 64, 8):
+        # for i in range(0, 64, 8):
+        #    new_x[:,:,j,:,:] = x[:,:,i,:,:]
+        #    j = j + 1
+
+        for i in range(26, 34, 1):
             new_x[:,:,j,:,:] = x[:,:,i,:,:]
             j = j + 1
 
@@ -452,8 +456,8 @@ class egoFirstBranchModelTSM(nn.Module):
         # You can get features out of the models
         out_backbone = self.tsm_model.features(new_x.cuda().reshape((N, -1, H, W)))
         out_backbone = out_backbone.reshape(N, 8, 2048)
-
-        out = self.avg_pool(out_backbone)
+        out_backbone = out_backbone.permute(0, 2, 1)
+        out = self.avg_pool(out_backbone).squeeze(2) # 4 by 2048
         # features = self.tsm(out_backbone)
         # and then classify those features
         # verb_logits, noun_logits = model.logits(features)
