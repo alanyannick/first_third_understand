@@ -108,6 +108,7 @@ class load_images_and_labels():  # for training
                  video_mask='/home/yangmingwen/first_third_person/nips_final_data/nips_data/per_video_gt_merged_train_nips.pickle',
                  frame_mask='/home/yangmingwen/first_third_person/nips_final_data/nips_data/final_nips_third_branch.pickle'):
         self.path = path
+        print(path)
         # self.img_files = sorted(glob.glob('%s/*.*' % path))
         with open(path, 'r') as file:
             self.img_files = file.readlines()
@@ -187,8 +188,10 @@ class load_images_and_labels():  # for training
 
 
     def __iter__(self):
+        # print('entered iter')
         self.count = -1
-        self.shuffled_vector = np.random.permutation(self.nF) if self.augment else np.arange(self.nF)
+        self.shuffled_vector = np.random.permutation(self.nF) # if self.augment else np.arange(self.nF)
+        # print(self.shuffled_vector)
         return self
 
     def __next__(self):
@@ -216,16 +219,25 @@ class load_images_and_labels():  # for training
 
         for index, files_index in enumerate(range(ia, ib)):
             if self.shuffle_switch:
+                # print('fid',files_index)
+                print('rid', self.shuffled_vector[files_index])
+                # print('ia',ia)
+                # print('ib', ib)
                 img_path = self.img_files[self.shuffled_vector[files_index]]
+                # print(self.shuffled_vector[files_index])
                 label_path = self.label_files[self.shuffled_vector[files_index]]
+                # print(self.shuffled_vector[files_index])
+                # print(img_path)
+                # print(label_path)
             else:
                 img_path = self.img_files[files_index]
                 label_path = self.label_files[files_index]
 
+
             scene_flag = True
             if scene_flag:
                 scene_path = (img_path.split(img_path.split('-')[-1])[0] + '00001.jpg').replace('images', 'scenes').replace('first-', 'third-')
-                scene_path = scene_path.replace('BD020001_third-00001', 'MBYXAEGO_5_third-00001')
+                # scene_path = scene_path.replace('BD020001_third-00001', 'MBYXAEGO_5_third-00001')
                 scene_gt_path = (img_path).replace('images', 'scenes_gt').replace('first-', 'third-')
                 scene_img = cv2.imread(scene_path)
                 scene_gt_img = cv2.imread(scene_gt_path)
@@ -433,6 +445,9 @@ class load_images_and_labels():  # for training
             # Load labels and transfer it from CxCyWH to LxLyRxRy
             if os.path.isfile(label_path):
                 labels0 = np.loadtxt(label_path, dtype=np.float32).reshape(-1, 5)
+                # print(labels0)
+                if labels0.max() >2:
+                        print('Error')
                 labels1 = labels0.copy()
                 labels = labels1.copy()
                 w = 800
@@ -477,6 +492,14 @@ class load_images_and_labels():  # for training
 
         # Transfer the label as contin
         labels_all = np.ascontiguousarray(labels_all, dtype=np.float32)
+        print(labels_all)
+        if labels_all.max() > 2.0:
+            print('bug')
+            print(labels_all.max())
+            try:
+                print(label_path)
+            except:
+                print('Skip')
         try:
             # np.array img all will change it to 12 * 64 * 224 * 224 * 3 then transpose to 12 * 3 * 64 * 224 * 224
             return np.array(img_all).transpose(0, 4, 1, 2, 3), labels_all, scene_all, scene_gt_all, video_mask, frame_mask
