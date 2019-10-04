@@ -38,11 +38,26 @@ class First_Third_Net(nn.Module):
         # ====================== detach the rgb gradient =========
         # self.rgb.detach()
 
+
+
+
+
+
+
         # Third branch switch
         self.third_branch_switch = True
         # First branch
         # self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=3).cuda()
         self.first_i3d_switch = False
+
+
+
+
+
+
+
+
+
         if self.first_i3d_switch:
             # Build ego I3D module
             self.first_ego_pose_branch = egoFirstBranchModelI3D(num_classes=3).cuda()
@@ -80,7 +95,7 @@ class First_Third_Net(nn.Module):
         with_weight_balance = True
         if with_weight_balance:
         # Loss definition: Adds the pre-defined class weights
-            weights = [1, 0.5, 0.25]
+            weights = [0.25, 0.5, 1]
             class_weights = torch.FloatTensor(weights).cuda()
             self.ce_loss= nn.CrossEntropyLoss(weight=class_weights, size_average=True)
         else:
@@ -114,7 +129,7 @@ class First_Third_Net(nn.Module):
             self.channel_constrain_loss = ConstrainLoss()
 
     def forward(self, ego_rgb = None, exo_rgb = None, exo_rgb_gt = None, target = None, video_mask = None, frame_mask = None, test_mode = False,
-                mask_loss_switch = False, constain_switch=True):
+                mask_loss_switch = False, constain_switch=False):
         self.constrain_switch = constain_switch
 
         self.test_mode = test_mode
