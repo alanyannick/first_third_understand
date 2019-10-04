@@ -42,12 +42,13 @@ class First_Third_Net(nn.Module):
         self.third_branch_switch = True
         # First branch
         # self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=3).cuda()
-
-        # Build ego I3D module
-        self.first_ego_pose_branch = egoFirstBranchModelI3D(num_classes=3).cuda()
-
-        # Build ego TSM module
-        # self.first_ego_pose_branch = egoFirstBranchModelTSM(num_classes=3).cuda()
+        self.first_i3d_switch = False
+        if self.first_i3d_switch:
+            # Build ego I3D module
+            self.first_ego_pose_branch = egoFirstBranchModelI3D(num_classes=3).cuda()
+        else:
+            # Build ego TSM module
+            self.first_ego_pose_branch = egoFirstBranchModelTSM(num_classes=3).cuda()
 
         # Second Branch
         self.second_exo_affordance_branch = exoSecondBranchModel(256, num_classes=7).cuda()
@@ -136,10 +137,12 @@ class First_Third_Net(nn.Module):
 
         # ====================== First Branch: ego pose
         # for cross_entropy / with out B X 1 X Class
-        i3d_backbone_feature, ego_pose_out = self.first_ego_pose_branch(self.ego_rgb.cuda().float())
-        retina_ego_features = self.merge_feature_i3d(i3d_backbone_feature).cuda()
-        # TSM_backbone_feature, ego_pose_out = self.first_ego_pose_branch((self.ego_rgb).cuda().float())
-        # retina_ego_features = self.merge_feature_TSM(TSM_backbone_feature).cuda()
+        if self.first_i3d_switch:
+            i3d_backbone_feature, ego_pose_out = self.first_ego_pose_branch(self.ego_rgb.cuda().float())
+            retina_ego_features = self.merge_feature_i3d(i3d_backbone_feature).cuda()
+        else:
+            TSM_backbone_feature, ego_pose_out = self.first_ego_pose_branch((self.ego_rgb).cuda().float())
+            retina_ego_features = self.merge_feature_TSM(TSM_backbone_feature).cuda()
 
         # Detach pose branch for avoiding influence
         detach_ego = False
