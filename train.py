@@ -196,27 +196,32 @@ def train(
 
             if count_i >= 4:
                 count_i = 0
+                tb_logger.add_scalar('pose_loss', float(model.losses['pose_loss']), i)
                 optimizer.step()
                 optimizer.zero_grad()
-            optimizer.step()
-            optimizer.zero_grad()
+                s =('%g/%g' % (epoch, epochs - 1),
+                           '%g/%g' % (i, len(dataloader) - 1),
+                            'total_loss', float(loss),
+                            'pose_loss:', float(model.losses['pose_loss']),
+                            'affordance_loss', float(model.losses['affordance_loss']),
+                            'mask_loss', float(model.losses['mask_loss']),
+                            'constrain_loss', float(model.losses['constrain_loss']),
+                            'time:', time.time() - t0)
+                print(s)
+                t0 = time.time()
+                # Write epoch results
+                file.write(str(s))
+                file.write('\n')
+
+            # optimizer.step()
+            # optimizer.zero_grad()
             # Running epoch-means of tracked metrics
             # ui += 1
             # for key, val in model.losses.items():
             #     rloss[key] = rloss[key] #  (rloss[key] * ui + val) / (ui + 1)
 
-            s =('%g/%g' % (epoch, epochs - 1),
-                       '%g/%g' % (i, len(dataloader) - 1),
-                        'total_loss', float(loss),
-                        'pose_loss:', float(model.losses['pose_loss']),
-                        'affordance_loss', float(model.losses['affordance_loss']),
-                        'mask_loss', float(model.losses['mask_loss']),
-                        'constrain_loss', float(model.losses['constrain_loss']),
-                        'time:', time.time() - t0)
 
-            tb_logger.add_scalar('pose_loss', float(model.losses['pose_loss']), i)
-            t0 = time.time()
-            print(s)
+
             # visLoss.plot_current_errors(i, 1, rloss)
             # if loss.detach().cpu().numpy():
             # Update best loss
@@ -227,9 +232,7 @@ def train(
             #     best_loss = loss_per_target
             # Save backup weights every 5 epochs
 
-            # Write epoch results
-            file.write(str(s))
-            file.write('\n')
+
 
             # if (epoch > 0) & (epoch % 200 == 0):
             #     backup_file_name = 'backup{}.pt'.format(epoch)
