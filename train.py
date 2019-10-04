@@ -26,6 +26,7 @@ vis = visdom.Visdom(port=8399)
 
 # CUDA_VISIBLE_DEVICES=2 python train.py --batch-size 4 --weight weight_retina_05_09_Pose_Affordance_Third_bp_3 --epochs 100 --data-config cfg/person.data
 
+
 def train(
         net_config_path,
         data_config_path,
@@ -41,6 +42,9 @@ def train(
         var=0,
         gpu_id='2'
 ):
+    from tensorboardX import SummaryWriter
+    tb_logger = SummaryWriter(log_dir='../tb_logger/' + opt.weights_path)
+
     # device = torch_utils.select_device(gpu_choice=gpu_id)
     # print("Using device: \"{}\"".format(device))
     # criterion = FocalLoss()
@@ -77,12 +81,21 @@ def train(
                                         multi_scale=multi_scale, augment=False, center_crop=True,
                                         video_mask=pickle_video_mask)
 
-    lr0 = 0.001
+    lr0 = 0.0001
     if resume:
         checkpoint = torch.load(latest_weights_file, map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         model.cuda().train()
         # Set optimizer
+        optim_params =[]
+        for k, v in model.named_parameters():  # can optimize for a part of the model
+            if v.requires_grad:
+                optim_params.append(v)
+
+        # torch.save(self.netG_tmp.state_dict(), '/home/tmp_weight.pth')
+        # self.netG_tmp.load_state_dict(torch.load('/home/tmp_weight.pth'))
+
+        # optimizer = torch.optim.Adam(optim_params, lr=lr0)
         optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=lr0, momentum=.9)
         start_epoch = checkpoint['epoch'] + 1
         if checkpoint['optimizer'] is not None:
@@ -111,7 +124,7 @@ def train(
 
     # Set scheduler
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[54, 61], gamma=0.1)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
+    # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
 
     model_info(model)
     t0 = time.time()
@@ -134,7 +147,7 @@ def train(
         current_mask_loss_switch = False
         constain_switch = False
 
-        if epoch >= 1:
+        if epoch >= 5:
             lr = lr0 / 10
             mask_loss_switch = True
             current_mask_loss_switch = mask_loss_switch
@@ -152,18 +165,7 @@ def train(
         for g in optimizer.param_groups:
             g['lr'] = lr
 
-        # Freeze darknet53.conv.74 layers for first epoch
-        if freeze_backbone:
-            if epoch == 0:
-                for i, (name, p) in enumerate(model.named_parameters()):
-                    if int(name.split('.')[1]) < 75:  # if layer < 75
-                        p.requires_grad = False
-            elif epoch == 1:
-                for i, (name, p) in enumerate(model.named_parameters()):
-                    if int(name.split('.')[1]) < 75:  # if layer < 75
-                        p.requires_grad = True
-
-        optimizer.zero_grad()
+        # optimizer.zero_grad()
 
         # write loss file
         file = open(os.path.join(weights_path, 'weights_results.txt'), 'a')
@@ -173,13 +175,7 @@ def train(
             if sum([len(x) for x in targets]) < 1:  # if no targets continue
                 continue
 
-            # # Switch > 2400 warm up affordance
-            if i > 2400:
-                constain_switch = True
-                current_mask_loss_switch = True
-                lr = 0.001
-
-            print('Current_lr:' + str(lr))
+            # print('Current_lr:' + str(lr))
 
             # Train Pose Branch
             constain_switch = False
@@ -198,11 +194,12 @@ def train(
 
             count_i += 1
 
-            if count_i >= 3:
+            if count_i >= 4:
                 count_i = 0
                 optimizer.step()
                 optimizer.zero_grad()
-
+            optimizer.step()
+            optimizer.zero_grad()
             # Running epoch-means of tracked metrics
             # ui += 1
             # for key, val in model.losses.items():
@@ -217,6 +214,7 @@ def train(
                         'constrain_loss', float(model.losses['constrain_loss']),
                         'time:', time.time() - t0)
 
+            tb_logger.add_scalar('pose_loss', float(model.losses['pose_loss']), i)
             t0 = time.time()
             print(s)
             # visLoss.plot_current_errors(i, 1, rloss)
@@ -233,20 +231,20 @@ def train(
             file.write(str(s))
             file.write('\n')
 
-            if (epoch > 0) & (epoch % 200 == 0):
-                backup_file_name = 'backup{}.pt'.format(epoch)
-                backup_file_path = os.path.join(weights_path, backup_file_name)
-                os.system('cp {} {}'.format(
-                    latest_weights_file,
-                    backup_file_path,
-                ))
-
-                checkpoint = {'epoch': epoch,
-                              'best_loss': best_loss,
-                              'model': model.state_dict(),
-                              'optimizer': optimizer.state_dict()}
-                torch.save(checkpoint, backup_file_path)
-                print('Save Model Backup')
+            # if (epoch > 0) & (epoch % 200 == 0):
+            #     backup_file_name = 'backup{}.pt'.format(epoch)
+            #     backup_file_path = os.path.join(weights_path, backup_file_name)
+            #     os.system('cp {} {}'.format(
+            #         latest_weights_file,
+            #         backup_file_path,
+            #     ))
+            #
+            #     checkpoint = {'epoch': epoch,
+            #                   'best_loss': best_loss,
+            #                   'model': model.state_dict(),
+            #                   'optimizer': optimizer.state_dict()}
+            #     torch.save(checkpoint, backup_file_path)
+            #     print('Save Model Backup')
             #
             # if i % 500 == 0:
             #     # Save latest checkpoint
@@ -258,7 +256,7 @@ def train(
             #     tmp_weights_file = os.path.join(weights_path, 'tmp'+str(i)+'.pt')
             #     torch.save(checkpoint, latest_weights_file)
             #
-            if (i > 0) & (i % 2500 == 0):
+            if (i > 1) & (i % 2500 == 0):
                 # Save tmp checkpoint
                 checkpoint = {'epoch': i,
                               'best_loss': best_loss,
@@ -269,12 +267,12 @@ def train(
                 torch.save(checkpoint, tmp_weights_file)
 
         # Save latest checkpoint
-        # checkpoint = {'epoch': epoch,
-        #               'best_loss': best_loss,
-        #               'model': model.state_dict(),
-        #               'optimizer': optimizer.state_dict()}
-        # torch.save(checkpoint, best_weights_file)
-        # print('Save Model Best')
+        checkpoint = {'epoch': epoch,
+                      'best_loss': best_loss,
+                      'model': model.state_dict(),
+                      'optimizer': optimizer.state_dict()}
+        torch.save(checkpoint, best_weights_file)
+        print('Save Model Best')
 
         # file.close()
 
