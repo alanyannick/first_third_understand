@@ -117,6 +117,7 @@ def test(
 
                     pose_label, pose_affordance, frame_affordance= model(imgs, scenes, scenes_gt, targets, video_mask, frame_mask, test_mode=True)
                     predict_pose_label = pose_label.cpu().float().numpy()[0]
+
                     gt_pose_label = np.array(targets[0][0][0])
 
                     # Bilinear version
@@ -135,6 +136,7 @@ def test(
                     gt_frame_mask = colorEncode(gt_sem_frame_affordance_mask, colors)
 
                     # get the accuracy
+
                     total_classes[int(gt_pose_label)] += 1
                     if predict_pose_label == gt_pose_label:
                         pose_correct_count += 1
@@ -309,6 +311,8 @@ def test(
 
         print('Final Pose accuracy:' + str(pose_correct_count / total_count))
         class_balance_accuracy = np.array(corrct_class_balance) / np.array(total_classes)
+        print('Class balance accuracy:')
+        print(class_balance_accuracy)
         print('Final Balance Class Pose accuracy:' + str(class_balance_accuracy.mean()))
 
 
@@ -318,11 +322,12 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
 
     parser.add_argument('--data-config', type=str, default='cfg/person.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weight_retina_05_21_Pose_Affordance_Third_Final_Version_Equal_Loss_Switch_warm_up_2400/tmp_epo3_2500.pt', help='path to weights file')
+    parser.add_argument('--weights', type=str,
+                        default='/home/yangmingwen/first_third_person/first_third_understanding/weight_retina_10_10_Pose_Classification_TSM?Batch16?_interval-cetner1_sgd_shuffle/tmp_epo0_2500.pt', help='path to weights file')
     parser.add_argument('--n-cpus', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--img-size', type=int, default=416, help='size of each image dimension')
     parser.add_argument('--worker', type=str, default='first', help='size of each image dimension')
-    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/weight_retina_05_25_Pose_Affordance_Third_Final_Version_Equal_Loss_pretrain/', help='cfg file path')
+    parser.add_argument('--out', type=str, default='/home/yangmingwen/first_third_person/first_third_result/Classification_i3d?Batch16?_interval-cetner1_sgd_shuffl/', help='cfg file path')
     parser.add_argument('--cfg', type=str, default='cfg/rgb-encoder.cfg,cfg/classifier.cfg', help='cfg file path')
     parser.add_argument('--testing_data_mode', type=bool, default=True, help='using testing or training data')
     parser.add_argument('--affordance_mode', type=bool, default=True, help='using testing or training data')
