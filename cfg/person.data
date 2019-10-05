@@ -1,0 +1,19 @@
+# Predict Class Num
+classes=3
+# Train Folder
+train=/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/file_list_train_new_5_14.txt
+# train=/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/file_list_train_new_5_14.txt
+# Valid Filder
+valid=/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/file_list_test_loc_5_24_nips.txt
+#valid=/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/file_list_test_new_5_14.txt
+valid2=/home/yangmingwen/first_third_person/data_2019_3_15/final-dataset/file_list_test_new_5_14.txt
+# Display name
+names=data/coco.names
+# Train Pickle
+pickle_video_mask_train=/home/yangmingwen/first_third_person/nips_final_data/nips_data/per_video_gt_merged_train_nips.pickle
+pickle_ignore_mask_train=/home/yangmingwen/first_third_person/nips_final_data/nips_data/ignore_mask_merged_train_nips.pickle
+# Test Pickle
+pickle_video_mask_test=/home/yangmingwen/first_third_person/merged_clusters/per_video_gt_merged_test.pickle
+pickle_ignore_mask_test=/home/yangmingwen/first_third_person/merged_clusters/ignore_mask_merged_test.pickle
+# pickle_frame_mask_test=/home/yangmingwen/first_third_person/merged_clusters/final_branch_gt_merged_test.pickle
+pickle_frame_mask_test=/home/yangmingwen/first_third_person/final_nips_third_branch_test_single_13.pickle
