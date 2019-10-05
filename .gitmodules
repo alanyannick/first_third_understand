@@ -1,0 +1,3 @@
+[submodule "networks/maskrcnn_benchmark"]
+	path = networks/maskrcnn_benchmark
+	url = ../../facebookresearch/maskrcnn-benchmark.git
