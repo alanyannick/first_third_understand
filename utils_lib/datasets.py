@@ -220,7 +220,7 @@ class load_images_and_labels():  # for training
         for index, files_index in enumerate(range(ia, ib)):
             if self.shuffle_switch:
                 # print('fid',files_index)
-                print('rid', self.shuffled_vector[files_index])
+                # print('rid', self.shuffled_vector[files_index])
                 # print('ia',ia)
                 # print('ib', ib)
                 img_path = self.img_files[self.shuffled_vector[files_index]]

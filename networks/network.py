@@ -38,25 +38,11 @@ class First_Third_Net(nn.Module):
         # ====================== detach the rgb gradient =========
         # self.rgb.detach()
 
-
-
-
-
-
-
         # Third branch switch
         self.third_branch_switch = True
         # First branch
         # self.first_ego_pose_branch = egoFirstBranchModel(256, num_classes=3).cuda()
         self.first_i3d_switch = False
-
-
-
-
-
-
-
-
 
         if self.first_i3d_switch:
             # Build ego I3D module
@@ -187,7 +173,7 @@ class First_Third_Net(nn.Module):
 
         # ====================== Third Branch: ego & exo affordance
         if self.third_branch_switch:
-            pick_mask = True
+            pick_mask = False
             if pick_mask:
                 # Create channel_weight_mask firstly
                 channel_pick_mask = torch.zeros(self.exo_rgb.shape[0], 13, 13, 7).cuda()
@@ -279,6 +265,7 @@ class First_Third_Net(nn.Module):
             # Debuging
             mask_loss = self.ce2d_loss(final_out_feature_final.permute(0, 3, 1, 2), frame_mask).cuda()
 
+            print(frame_mask)
             if mask_loss > 10:
                 print('debug')
                 torch.save(final_out_feature_final, '/home/yangmingwen/first_third_person/debug_feature.pth')
@@ -462,13 +449,17 @@ class egoFirstBranchModelTSM(nn.Module):
         N, T, C, H, W = x.shape
         new_x = torch.rand(N, T, int(C/8), H, W)
         j = 0
-        for i in range(0, 64, 8):
-           new_x[:,:,j,:,:] = x[:,:,i,:,:]
-           j = j + 1
+        # for i in range(0, 64, 8):
+        #    new_x[:,:,j,:,:] = x[:,:,i,:,:]
+        #    j = j + 1
 
         # for i in range(26, 34, 1):
         #     new_x[:,:,j,:,:] = x[:,:,i,:,:]
         #     j = j + 1
+
+        for i in range(16, 48, 4):
+           new_x[:,:,j,:,:] = x[:,:,i,:,:]
+           j = j + 1
 
         # out_backbone = new_x.reshape((N, 64, 1, 3, H, W))
         # You can get features out of the models

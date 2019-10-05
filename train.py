@@ -31,7 +31,7 @@ def train(
         net_config_path,
         data_config_path,
         img_size=416,
-        resume=False,
+        resume=True,
         epochs=100,
         batch_size=16,
         accumulated_batches=1,
@@ -70,6 +70,8 @@ def train(
     # here, for the rgb is 416 = 32 by 13 but for the classifier is 13 by 13
     model = networks.network.First_Third_Net()
 
+    # default log
+    log_count = 0
     # load_pretained = True
     # if load_pretained:
     #     model.load_state_dict(torch.load('./model/net.pth'))
@@ -82,7 +84,9 @@ def train(
                                         video_mask=pickle_video_mask)
 
     lr0 = 0.0001
+    resume = True
     if resume:
+        latest_weights_file = '/home/yangmingwen/first_third_person/first_third_understanding/weight_retina_10_11_Pose_Classification_TSM?Batch16?_sequebce-cetner1_sgd_shuffle_lr_0.00011/tmp_epo2_2500.pt'
         checkpoint = torch.load(latest_weights_file, map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         model.cuda().train()
@@ -143,21 +147,17 @@ def train(
         # Update scheduler (manual)  at 0, 54, 61 epochs to 1e-3, 1e-4, 1e-5
 
 
-        # @TODO Important Switch Here (Default Loss)
-        current_mask_loss_switch = False
-        constain_switch = False
-
-        if epoch >= 5:
+        if epoch >= 3 + start_epoch:
             lr = lr0 / 10
-            mask_loss_switch = True
-            current_mask_loss_switch = mask_loss_switch
-            constain_switch = True
+            # mask_loss_switch = True
+            # current_mask_loss_switch = mask_loss_switch
+            # constain_switch = True
 
-        elif epoch > 10:
+        elif epoch > 10 + start_epoch:
             lr = lr0 / 100
-            mask_loss_switch = True
-            current_mask_loss_switch = mask_loss_switch
-            constain_switch = True
+            # mask_loss_switch = True
+            # current_mask_loss_switch = mask_loss_switch
+            # constain_switch = True
 
         else:
             lr = lr0
@@ -179,7 +179,7 @@ def train(
 
             # Train Pose Branch
             constain_switch = False
-            current_mask_loss_switch = False
+            current_mask_loss_switch = True
 
             # Compute loss, compute gradient, update parameters
             loss = model(imgs, scenes, scenes_gt, targets, video_mask, frame_mask, mask_loss_switch=current_mask_loss_switch, constain_switch=constain_switch)
@@ -197,11 +197,12 @@ def train(
             if count_i >= 2:
                 count_i = 0
 
-                # Tensorboard Loger
-                tb_logger.add_scalar('pose_loss', float(model.losses['pose_loss']), i)
-                tb_logger.add_scalar('affordance_loss', float(model.losses['affordance_loss']), i)
-                tb_logger.add_scalar('mask_loss', float(model.losses['mask_loss']), i)
-                tb_logger.add_scalar('constrain_loss', float(model.losses['constrain_loss']), i)
+                log_count = log_count + 1
+                # Tensorboard Loge
+                tb_logger.add_scalar('pose_loss', float(model.losses['pose_loss']), log_count)
+                tb_logger.add_scalar('affordance_loss', float(model.losses['affordance_loss']), log_count)
+                tb_logger.add_scalar('mask_loss', float(model.losses['mask_loss']), log_count)
+                tb_logger.add_scalar('constrain_loss', float(model.losses['constrain_loss']), log_count)
                 tb_logger.add_scalar('total_loss', float(loss), i)
 
                 optimizer.step()
