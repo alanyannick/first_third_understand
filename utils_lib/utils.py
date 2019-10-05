@@ -4,8 +4,6 @@ import cv2
 import numpy as np
 import joblib
 import torch
-import torch.nn.functional as F
-import pylab as pl
 from utils_lib import torch_utils
 
 # Set printoptions
@@ -392,8 +390,8 @@ def plot_results():
                 plt.legend()
 
 
-def draw_bounding_box(image, bbox, thickness=1):
-    WHITE = (255, 255, 255)
+def draw_bounding_box(image, bbox, color, thickness=1):
+    WHITE = color
     bx, by, bw, bh = tuple(bbox)
     bx = int(bx)
     by = int(by)
@@ -449,25 +447,7 @@ def print_current_predict(targets, model):
     return gt_bbox, gt_label, predict_bbox, predict_label
 
 
-def drawing_bbox_gt(input, bbox, label, name, vis):
-    """
-    input tensor(1,1,1,1), np.bbox(1,1,1,1)
-    """
-    # transfer from rgb 2 bgr, tensor 2 numpy
-    scene_img_np = tensor2im(input)
-    # Draw the box
-    bbox_img = draw_bounding_box(scene_img_np, bbox)
-    # Draw the bbox with keypoints
-    bbox_img_with_keypoint = visual_keypoint(image=bbox_img, bbox=bbox, cluster_number=label)
-    # transfer from bgr 2 rgb, numpy 2 tensor
-    bbox_img = torch.from_numpy(bbox_img_with_keypoint).unsqueeze(0)
-    # normalize image
-    bbox_img = normalize_img(bbox_img)
-    vis.image(bbox_img[0, :, :, :], win=name, opts=dict(title=name + ' images'))
-
-    return bbox_img_with_keypoint
-
-def drawing_bbox_keypoint_gt(input, bbox, label):
+def drawing_bbox_keypoint_gt(input, bbox, label, color=(255,0,255), thickness=1):
     """
     input tensor(1,1,1,1), np.bbox(1,1,1,1)
     """
@@ -477,7 +457,7 @@ def drawing_bbox_keypoint_gt(input, bbox, label):
     # transfer to uint 8 and asconyiguous @Yangming important here
     image_bbox = np.ascontiguousarray(image_bbox, dtype=np.uint8)
     # Draw the box
-    bbox_img = draw_bounding_box(image_bbox, bbox)
+    bbox_img = draw_bounding_box(image_bbox, bbox, color, thickness)
     # Draw the bbox with keypoints
     bbox_img_with_keypoint = visual_keypoint(image=bbox_img, bbox=bbox, cluster_number=label)
     return bbox_img_with_keypoint
