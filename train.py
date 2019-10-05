@@ -194,9 +194,16 @@ def train(
 
             count_i += 1
 
-            if count_i >= 4:
+            if count_i >= 2:
                 count_i = 0
+
+                # Tensorboard Loger
                 tb_logger.add_scalar('pose_loss', float(model.losses['pose_loss']), i)
+                tb_logger.add_scalar('affordance_loss', float(model.losses['affordance_loss']), i)
+                tb_logger.add_scalar('mask_loss', float(model.losses['mask_loss']), i)
+                tb_logger.add_scalar('constrain_loss', float(model.losses['constrain_loss']), i)
+                tb_logger.add_scalar('total_loss', float(loss), i)
+
                 optimizer.step()
                 optimizer.zero_grad()
                 s =('%g/%g' % (epoch, epochs - 1),
